@@ -229,7 +229,7 @@ pub(super) fn render_collapsed(
         hits.sidebar_toggle.x,
         hits.sidebar_toggle.y,
         hits.sidebar_toggle.width,
-        "»",
+        "«",
         Style::default().fg(palette.overlay0),
     );
 }
@@ -247,7 +247,7 @@ pub(super) fn render_expanded(
     hits.sidebar_divider = if area.is_empty() {
         Rect::default()
     } else {
-        Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
+        Rect::new(area.x, area.y, 1, area.height)
     };
     let (workspace_area, detail_area) =
         crate::ui::expanded_sidebar_sections(area, state.sidebar_section_split);
@@ -574,7 +574,7 @@ pub(super) fn render_expanded(
         hits.sidebar_toggle.x,
         hits.sidebar_toggle.y,
         hits.sidebar_toggle.width,
-        "«",
+        "»",
         Style::default().fg(palette.overlay0),
     );
 }

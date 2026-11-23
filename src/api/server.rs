@@ -490,7 +490,13 @@ fn handle_connection_with_stop(
             let stop_caller = matches!(method_body, Method::ServerStop(_))
                 .then(|| crate::platform::local_stream_peer_description(&stream))
                 .flatten();
-            let response = handle_request(
+            let sender_pane_id = matches!(
+                method_body,
+                Method::PaneSendText(_) | Method::PaneSendInput(_)
+            )
+            .then(|| crate::peer_messages::sender_pane_from_request_line(line))
+            .flatten();
+            let response = handle_request_from(
                 Request {
                     id: request_id.clone(),
                     method: method_body,
@@ -500,6 +506,7 @@ fn handle_connection_with_stop(
                 server_stop,
                 stop_caller,
                 Some(response_write_rx),
+                sender_pane_id,
             );
             let result = write_text_line_allow_disconnect(&mut stream, &response);
             let _ = response_write_tx.send(());
@@ -548,6 +555,7 @@ fn finish_wait_response(
     result
 }
 
+#[cfg(test)]
 fn handle_request(
     request: Request,
     api_tx: &ApiRequestSender,
@@ -555,6 +563,26 @@ fn handle_request(
     server_stop: Option<&ServerStop>,
     stop_caller: Option<String>,
     response_write_complete: Option<std::sync::mpsc::Receiver<()>>,
+) -> String {
+    handle_request_from(
+        request,
+        api_tx,
+        capabilities,
+        server_stop,
+        stop_caller,
+        response_write_complete,
+        None,
+    )
+}
+
+fn handle_request_from(
+    request: Request,
+    api_tx: &ApiRequestSender,
+    capabilities: Option<ServerCapabilities>,
+    server_stop: Option<&ServerStop>,
+    stop_caller: Option<String>,
+    response_write_complete: Option<std::sync::mpsc::Receiver<()>>,
+    sender_pane_id: Option<String>,
 ) -> String {
     if matches!(&request.method, Method::Ping(_)) {
         return serde_json::to_string(&SuccessResponse {
@@ -598,7 +626,14 @@ fn handle_request(
         );
     }
 
-    dispatch_to_app(request, api_tx, None, response_write_complete, None)
+    dispatch_to_app(
+        request,
+        api_tx,
+        None,
+        response_write_complete,
+        None,
+        sender_pane_id,
+    )
 }
 
 pub(crate) fn api_method_name(method: &Method) -> &'static str {
@@ -937,7 +972,7 @@ pub(super) fn dispatch_to_app_with_timeout(
     api_tx: &ApiRequestSender,
     timeout: Option<Duration>,
 ) -> String {
-    dispatch_to_app(request, api_tx, timeout, None, None)
+    dispatch_to_app(request, api_tx, timeout, None, None, None)
 }
 
 pub(super) fn dispatch_to_app_with_caller_timeout(
@@ -951,6 +986,7 @@ pub(super) fn dispatch_to_app_with_caller_timeout(
         timeout,
         None,
         Some(("timeout", "timed out waiting for agent status")),
+        None,
     )
 }
 
@@ -960,10 +996,12 @@ fn dispatch_to_app(
     timeout: Option<Duration>,
     response_write_complete: Option<std::sync::mpsc::Receiver<()>>,
     timeout_response: Option<(&str, &str)>,
+    sender_pane_id: Option<String>,
 ) -> String {
     let request_id = request.id.clone();
     let (respond_to, response_rx) = std::sync::mpsc::channel();
     if let Err(err) = api_tx.send(ApiRequestMessage {
+        sender_pane_id,
         request,
         respond_to,
         response_write_complete,

@@ -75,8 +75,6 @@ impl ClientShellState {
                 .filter(|_| valid_navigation_target)
                 .or_else(|| pending_workspace_highlight.map(|pending| &pending.target)),
             reveal_navigation_workspace: &mut self.reveal_navigation_workspace,
-            dragged_workspace_id: None,
-            workspace_drop_indicator_row: None,
         };
         if let Some(snapshot) = local_snapshot {
             render::render_sidebar(
@@ -194,16 +192,6 @@ impl ClientShellState {
             Some(ClientChromeDrag::Tab { insert_index, .. }) => *insert_index,
             _ => None,
         };
-        let (dragged_workspace_id, workspace_drop_indicator_row) = match &self.chrome_drag {
-            Some(ClientChromeDrag::Workspace {
-                source_workspace_id,
-                target,
-            }) => (
-                Some(source_workspace_id.as_str()),
-                target.as_ref().map(|(_, row)| *row),
-            ),
-            _ => (None, None),
-        };
         let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
         self.hits = render::render_shell(
             &mut buffer,
@@ -231,8 +219,6 @@ impl ClientShellState {
                     .filter(|_| valid_navigation_target)
                     .or_else(|| pending_workspace_highlight.map(|pending| &pending.target)),
                 reveal_navigation_workspace: &mut self.reveal_navigation_workspace,
-                dragged_workspace_id,
-                workspace_drop_indicator_row,
             },
         );
         self.hits.panes = surface

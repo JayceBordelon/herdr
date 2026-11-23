@@ -20,6 +20,10 @@ include = [
     "Cargo.toml",
 ]
 
+[[bin]]
+name = "vcer"
+path = "src/main.rs"
+
 [workspace]
 members = ["crates/ghostty-vt"]
 default-members = [".", "crates/ghostty-vt"]

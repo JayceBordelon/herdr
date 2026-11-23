@@ -948,6 +948,19 @@ pub struct ClientShellSnapshot {
     pub panes: Vec<ClientShellPane>,
     pub agents: Vec<ClientShellAgent>,
     pub commands: Vec<ClientShellCommand>,
+    /// Recent text passed between panes, newest first.
+    #[serde(default)]
+    pub peer_messages: Vec<ClientShellPeerMessage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientShellPeerMessage {
+    pub seq: u64,
+    pub from_pane_id: String,
+    pub from_label: String,
+    pub to_pane_id: String,
+    pub to_label: String,
+    pub preview: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2817,6 +2830,7 @@ mod tests {
             tab_bar_right_separator: " · ".into(),
             agent_view_label: None,
             agent_order: Vec::new(),
+            peer_messages: Vec::new(),
             workspaces: vec![ClientShellWorkspace {
                 workspace_id: "w1".into(),
                 active_tab_id: "w1:t1".into(),

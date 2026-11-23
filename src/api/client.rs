@@ -183,10 +183,35 @@ impl From<serde_json::Error> for ApiClientError {
 }
 
 fn write_request(stream: &mut LocalStream, request: &Request) -> Result<(), ApiClientError> {
-    stream.write_all(serde_json::to_string(request)?.as_bytes())?;
+    stream.write_all(encode_request(request, current_pane_id().as_deref())?.as_bytes())?;
     stream.write_all(b"\n")?;
     stream.flush()?;
     Ok(())
+}
+
+fn current_pane_id() -> Option<String> {
+    std::env::var("HERDR_PANE_ID")
+        .ok()
+        .filter(|pane_id| !pane_id.is_empty())
+}
+
+/// Tags pane sends with their source so the server can show who messaged whom.
+fn encode_request(request: &Request, sender_pane_id: Option<&str>) -> serde_json::Result<String> {
+    let is_send = matches!(
+        request.method,
+        Method::PaneSendText(_) | Method::PaneSendInput(_)
+    );
+    let Some(sender_pane_id) = sender_pane_id.filter(|_| is_send) else {
+        return serde_json::to_string(request);
+    };
+    let mut value = serde_json::to_value(request)?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            crate::peer_messages::SENDER_PANE_FIELD.to_owned(),
+            sender_pane_id.into(),
+        );
+    }
+    serde_json::to_string(&value)
 }
 
 struct DeadlineReader<'a> {

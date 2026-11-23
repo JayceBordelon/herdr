@@ -2908,7 +2908,7 @@ impl HeadlessServer {
 
     fn handle_api_request_with_shutdown_check_inner(
         &mut self,
-        msg: api::ApiRequestMessage,
+        mut msg: api::ApiRequestMessage,
         skip_default_workspace_for_request: bool,
         client_local: bool,
     ) -> bool {
@@ -2978,6 +2978,10 @@ impl HeadlessServer {
         }
 
         let mut changed = metadata_expired | api::request_changes_ui(&msg.request);
+        let peer_message = msg
+            .sender_pane_id
+            .take()
+            .and_then(|sender| crate::app::peer_message_from_request(sender, &msg.request));
         let skip_default_workspace = skip_default_workspace_for_request
             || matches!(
                 &msg.request.method,
@@ -3090,6 +3094,11 @@ impl HeadlessServer {
             self.app
                 .handle_api_request_after_internal_events_drained(msg.request)
         };
+        if let Some(peer_message) = peer_message {
+            if serde_json::from_str::<api::schema::SuccessResponse>(&response).is_ok() {
+                changed |= self.app.record_peer_message(peer_message);
+            }
+        }
         if let Some(snapshot) = frozen_alt_screen_read {
             if let Ok(mut success) = serde_json::from_str::<api::schema::SuccessResponse>(&response)
             {

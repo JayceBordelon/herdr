@@ -18,7 +18,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const LAUNCHCTL: &str = "/bin/launchctl";
-const LABEL_PREFIX: &str = "dev.herdr.server.";
+const LABEL_PREFIX: &str = "dev.vcer.server.";
 /// Tells the job process to fork the server and exit; never inherited by panes.
 const DETACH_ENV: &str = "HERDR_LAUNCHD_DETACH";
 /// Finished jobs stay loaded until logout; older ones are removed on the next launch.
@@ -306,15 +306,15 @@ mod tests {
         let recent = Duration::from_secs(990).as_nanos();
         let list = format!(
             "PID\tStatus\tLabel\n\
-             -\t0\tdev.herdr.server.12.{old}\n\
-             42\t0\tdev.herdr.server.13.{old}\n\
-             -\t0\tdev.herdr.server.14.{recent}\n\
+             -\t0\tdev.vcer.server.12.{old}\n\
+             42\t0\tdev.vcer.server.13.{old}\n\
+             -\t0\tdev.vcer.server.14.{recent}\n\
              -\t0\tcom.example.other.{old}\n"
         );
 
         assert_eq!(
             stale_job_labels(&list, now),
-            vec![format!("dev.herdr.server.12.{old}").as_str()]
+            vec![format!("dev.vcer.server.12.{old}").as_str()]
         );
     }
 
@@ -326,7 +326,7 @@ mod tests {
             .env("HERDR_TEST_VALUE", "\"q\"\tx")
             .env_remove("HOME");
         let plist = job_plist(
-            "dev.herdr.server.1.2",
+            "dev.vcer.server.1.2",
             &command,
             Some(Path::new("/tmp")),
             0o077,
@@ -353,7 +353,7 @@ mod tests {
             let mut command = Command::new("/bin/true");
             command.env("HERDR_TEST_VALUE", &value);
             assert!(
-                job_plist("dev.herdr.server.1.2", &command, None, 0o022).is_err(),
+                job_plist("dev.vcer.server.1.2", &command, None, 0o022).is_err(),
                 "{value:?}"
             );
         }

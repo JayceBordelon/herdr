@@ -23,6 +23,7 @@ mod config;
 mod copy_mode;
 mod detect;
 mod events;
+mod fork_identity;
 use ghostty_vt as ghostty;
 mod handoff_runtime;
 mod input;
@@ -34,6 +35,7 @@ mod logging;
 mod metadata_tokens;
 mod noninteractive_process;
 mod pane;
+mod peer_messages;
 use ghostty_vt::pane_graphics_files;
 mod persist;
 mod platform;
@@ -509,6 +511,7 @@ fn finish_cli(outcome: io::Result<cli::CommandOutcome>) -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
+    fork_identity::detach_from_stock_herdr_env();
     let raw_args: Vec<String> = match args_as_utf8(std::env::args_os()) {
         Ok(args) => args,
         Err(err) => {
@@ -724,7 +727,11 @@ fn main() -> io::Result<()> {
 
     if args.iter().any(|a| a == "--version" || a == "-V") {
         platform::begin_cli_output();
-        println!("herdr {}", crate::build_info::version());
+        println!(
+            "{} {}",
+            fork_identity::PRODUCT_NAME,
+            crate::build_info::version()
+        );
         return Ok(());
     }
 

@@ -181,8 +181,54 @@ pub struct App {
 pub(crate) const APP_EVENT_CHANNEL_CAPACITY: usize = 256;
 pub(crate) const APP_EVENT_DRAIN_LIMIT: usize = 64;
 
+pub(crate) struct PendingPeerMessage {
+    sender_pane_id: String,
+    target_pane_id: String,
+    text: String,
+}
+
+pub(crate) fn peer_message_from_request(
+    sender_pane_id: String,
+    request: &crate::api::schema::Request,
+) -> Option<PendingPeerMessage> {
+    use crate::api::schema::Method;
+    let (target_pane_id, text) = match &request.method {
+        Method::PaneSendText(params) => (&params.pane_id, &params.text),
+        Method::PaneSendInput(params) => (&params.pane_id, &params.text),
+        _ => return None,
+    };
+    Some(PendingPeerMessage {
+        sender_pane_id,
+        target_pane_id: target_pane_id.clone(),
+        text: text.clone(),
+    })
+}
+
+impl App {
+    /// Records text passed between two live panes. Returns whether the log changed.
+    pub(crate) fn record_peer_message(&mut self, message: PendingPeerMessage) -> bool {
+        let (Some(from), Some(to)) = (
+            self.peer_endpoint(&message.sender_pane_id),
+            self.peer_endpoint(&message.target_pane_id),
+        ) else {
+            return false;
+        };
+        self.state.peer_messages.record(from, to, &message.text)
+    }
+
+    fn peer_endpoint(&self, pane_id: &str) -> Option<crate::peer_messages::PeerEndpoint> {
+        let (ws_idx, pane_id) = self.parse_pane_id(pane_id)?;
+        Some(crate::peer_messages::PeerEndpoint {
+            pane_id: self.public_pane_id(ws_idx, pane_id)?,
+            label: self.workspace_info(ws_idx).label,
+        })
+    }
+}
+
 fn auto_updates_enabled(background_updates: bool) -> bool {
-    background_updates && !cfg!(debug_assertions)
+    crate::fork_identity::UPSTREAM_DISTRIBUTION_ENABLED
+        && background_updates
+        && !cfg!(debug_assertions)
 }
 
 fn background_update_check_enabled(background_updates: bool, check_enabled: bool) -> bool {
@@ -544,6 +590,7 @@ impl App {
             headless_size: config.headless_size(),
             agent_panel_sort,
             agent_view_override: None,
+            peer_messages: Default::default(),
             sidebar_agents: config.ui.sidebar.agents.clone(),
             sidebar_spaces: config.ui.sidebar.spaces.clone(),
             next_agent_state_change_seq: 0,

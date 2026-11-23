@@ -2120,6 +2120,13 @@ fn resolve_install_source(
     platform: &RemotePlatform,
     override_binary: Option<PathBuf>,
 ) -> io::Result<InstallSource> {
+    if !crate::fork_identity::UPSTREAM_DISTRIBUTION_ENABLED {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            crate::fork_identity::REMOTE_INSTALL_DISABLED_MESSAGE,
+        ));
+    }
+
     if let Some(path) = override_binary {
         return Ok(InstallSource::persistent(path));
     }

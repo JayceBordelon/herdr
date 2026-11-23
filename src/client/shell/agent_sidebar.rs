@@ -72,10 +72,11 @@ pub(super) fn render_agent_panel(
         buffer,
         area,
         &rows,
-        snapshot
-            .agent_view_label
-            .as_ref()
-            .map(|_| " no matching agents"),
+        Some(if snapshot.agent_view_label.is_some() {
+            " no matching agents"
+        } else {
+            " no agents running"
+        }),
         config,
         agent_scroll,
         hits,
@@ -370,6 +371,113 @@ pub(super) fn render_agent_row(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
             buffer,
         );
+        if row.focused {
+            if let Some(cell) = buffer.cell_mut((rect.x, rect.y + index as u16)) {
+                cell.set_symbol("▌").set_fg(palette.accent);
+            }
+        }
+    }
+}
+
+/// Lists recent pane-to-pane messages, newest first, two rows each.
+pub(super) fn render_peer_message_feed(
+    buffer: &mut Buffer,
+    area: Rect,
+    messages: &[crate::protocol::ClientShellPeerMessage],
+    agents: &[crate::protocol::ClientShellAgent],
+    config: &ClientShellConfig,
+) {
+    if area.height == 0 || area.width == 0 {
+        return;
+    }
+    let palette = &config.palette;
+    let width = usize::from(area.width);
+    buffer.set_stringn(
+        area.x,
+        area.y,
+        "─".repeat(width),
+        width,
+        Style::default().fg(palette.surface_dim),
+    );
+    if area.height < 2 {
+        return;
+    }
+    buffer.set_stringn(
+        area.x,
+        area.y + 1,
+        " messages",
+        width,
+        Style::default()
+            .fg(palette.overlay0)
+            .add_modifier(Modifier::BOLD),
+    );
+    let body_y = area.y + 2;
+    let body_rows = area.bottom().saturating_sub(body_y);
+    if messages.is_empty() {
+        if body_rows > 0 {
+            buffer.set_stringn(
+                area.x,
+                body_y,
+                " no messages yet",
+                width,
+                Style::default()
+                    .fg(palette.overlay0)
+                    .add_modifier(Modifier::DIM),
+            );
+        }
+        return;
+    }
+    let inner_width = width.saturating_sub(1);
+    for (index, message) in messages.iter().take(usize::from(body_rows / 2)).enumerate() {
+        let y = body_y + (index as u16) * 2;
+        let route = peer_message_route(message, agents);
+        buffer.set_stringn(
+            area.x + 1,
+            y,
+            crate::ui::truncate_end(&route, inner_width),
+            inner_width,
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
+        buffer.set_stringn(
+            area.x + 1,
+            y + 1,
+            crate::ui::truncate_end(&message.preview, inner_width),
+            inner_width,
+            Style::default().fg(palette.subtext0),
+        );
+    }
+}
+
+/// Names both ends by agent, adding pane ids when the names alone are ambiguous.
+fn peer_message_route(
+    message: &crate::protocol::ClientShellPeerMessage,
+    agents: &[crate::protocol::ClientShellAgent],
+) -> String {
+    let name = |pane_id: &str, fallback: &str| {
+        agents
+            .iter()
+            .find(|agent| agent.pane_id == pane_id)
+            .and_then(|agent| {
+                agent
+                    .display_agent
+                    .as_deref()
+                    .or(agent.name.as_deref())
+                    .or(agent.agent.as_deref())
+            })
+            .unwrap_or(fallback)
+            .to_owned()
+    };
+    let from = name(&message.from_pane_id, &message.from_label);
+    let to = name(&message.to_pane_id, &message.to_label);
+    if from == to {
+        format!(
+            "{from} {} → {to} {}",
+            message.from_pane_id, message.to_pane_id
+        )
+    } else {
+        format!("{from} → {to}")
     }
 }
 

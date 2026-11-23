@@ -19,7 +19,7 @@ pub(in crate::client::shell) fn render_sidebar_background(
     palette: &Palette,
 ) {
     buffer.set_style(area, Style::default().bg(palette.sidebar_bg));
-    let separator_x = area.right().saturating_sub(1);
+    let separator_x = area.x;
     for y in area.y..area.bottom() {
         if let Some(cell) = buffer.cell_mut((separator_x, y)) {
             cell.set_symbol("│");
@@ -246,8 +246,6 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) tab_drag_insert_index: Option<usize>,
     pub(super) selected_workspace_id: Option<&'a WorkspaceNavigationTarget>,
     pub(super) reveal_navigation_workspace: &'a mut bool,
-    pub(super) dragged_workspace_id: Option<&'a str>,
-    pub(super) workspace_drop_indicator_row: Option<u16>,
 }
 
 pub(super) fn render_shell(

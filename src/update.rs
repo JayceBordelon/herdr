@@ -2181,6 +2181,10 @@ fn preserve_preview_channel_for_install(
 
 /// Manual self-update command (`herdr update`).
 pub fn self_update(options: SelfUpdateOptions) -> Result<Version, String> {
+    if !crate::fork_identity::UPSTREAM_DISTRIBUTION_ENABLED {
+        return Err(crate::fork_identity::UPDATES_DISABLED_MESSAGE.into());
+    }
+
     let channel = UpdateChannel::configured();
 
     if is_homebrew_managed_install() {

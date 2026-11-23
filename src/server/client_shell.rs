@@ -258,6 +258,7 @@ pub(super) fn snapshot_with_completions(
         tab_bar_right_separator: app.state.tab_bar_right_separator.clone(),
         agent_view_label,
         agent_order,
+        peer_messages: app.state.peer_messages.newest_first(),
         workspaces,
         tabs,
         panes,
