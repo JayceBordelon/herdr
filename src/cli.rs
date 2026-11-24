@@ -49,7 +49,7 @@ pub(crate) const AGENT_HELP_FOOTER: &str = concat!(
     "  Control vcer panes, agents, or workspaces:\n",
     "    SKIP if a vcer skill is already in your context. Otherwise run: vcer --skill\n",
     "  Help a human understand or set up vcer, or debug a problem with it:\n",
-    "    read the source and docs: https://github.com/herdrdev/vcer",
+    "    read the source and docs: https://github.com/JayceBordelon/herdr",
 );
 
 pub(crate) fn parse_token_assignment(raw: &str) -> Result<(String, Option<String>), String> {
