@@ -52,6 +52,14 @@ pub(crate) fn spawn_launchd_job(command: &Command) -> io::Result<String> {
     let plist_path = dir.path().join("job.plist");
     write_private_file(&plist_path, plist.as_bytes())?;
     launchctl(&["bootstrap", &domain, &plist_path.to_string_lossy()])?;
+    // macOS 26.5 loads a bootstrapped job without starting it, even with
+    // RunAtLoad. The plist omits RunAtLoad and the start is explicit here,
+    // which behaves the same on every supported macOS version.
+    let target = format!("{domain}/{label}");
+    if let Err(err) = launchctl(&["kickstart", &target]) {
+        let _ = launchctl(&["bootout", &target]);
+        return Err(err);
+    }
     Ok(label)
 }
 
@@ -226,9 +234,9 @@ fn job_plist(
         push_key_string(&mut plist, key, "/dev/null")?;
     }
     // Run once and never restart. The forked server must survive the job
-    // process exiting, and keeps normal scheduling priority.
+    // process exiting, and keeps normal scheduling priority. No RunAtLoad:
+    // the caller starts the job with kickstart.
     plist.push_str(concat!(
-        "<key>RunAtLoad</key>\n<true/>\n",
         "<key>KeepAlive</key>\n<false/>\n",
         "<key>AbandonProcessGroup</key>\n<true/>\n",
     ));
