@@ -33,7 +33,7 @@ impl SessionConfig {
         let app_dir = if cfg!(debug_assertions) {
             "vcer-dev"
         } else {
-            "herdr"
+            "vcer"
         };
         self.root.join(app_dir).join("sessions").join(name)
     }
@@ -149,7 +149,7 @@ fn delete_session_distinguishes_case_sensitive_siblings() {
 fn delete_session_preserves_running_session() {
     let config = SessionConfig::new();
     let dir = config.create_session("Foo");
-    let _listener = std::os::unix::net::UnixListener::bind(dir.join("herdr.sock")).unwrap();
+    let _listener = std::os::unix::net::UnixListener::bind(dir.join("vcer.sock")).unwrap();
 
     let output = config.delete("Foo");
 

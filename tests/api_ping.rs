@@ -122,14 +122,10 @@ fn spawn_herdr_with_options(
     path_override: Option<&Path>,
     shell: &str,
 ) -> SpawnedHerdr {
-    fs::create_dir_all(config_home.join("herdr")).unwrap();
+    fs::create_dir_all(config_home.join("vcer")).unwrap();
     fs::create_dir_all(runtime_dir).unwrap();
     register_runtime_dir(runtime_dir);
-    fs::write(
-        config_home.join("herdr/config.toml"),
-        "onboarding = false\n",
-    )
-    .unwrap();
+    fs::write(config_home.join("vcer/config.toml"), "onboarding = false\n").unwrap();
 
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -293,7 +289,7 @@ fn ping_over_socket_returns_version() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -318,11 +314,11 @@ fn spawned_server_ignores_inherited_pane_env() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let startup_cwd = base.join("startup");
     fs::create_dir_all(&startup_cwd).unwrap();
 
-    // A shell inside a herdr pane passes these to every process it starts.
+    // A shell inside a vcer pane passes these to every process it starts.
     let saved: Vec<_> = ["HERDR_STARTUP_CWD", "HERDR_SESSION"]
         .into_iter()
         .map(|name| (name, std::env::var_os(name)))
@@ -346,7 +342,7 @@ fn spawned_server_ignores_inherited_pane_env() {
     let app_dir = if cfg!(debug_assertions) {
         "vcer-dev"
     } else {
-        "herdr"
+        "vcer"
     };
     assert!(!config_home.join(app_dir).join("sessions").exists());
 
@@ -359,7 +355,7 @@ fn server_reload_agent_manifests_reports_runtime_override() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -405,7 +401,7 @@ fn shutdown_preserves_session_after_shell_is_signaled() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let mut child = spawn_herdr_with_shell(&config_home, &runtime_dir, &socket_path, "/bin/sh");
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -477,7 +473,7 @@ fn workspace_list_and_create_round_trip() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -717,7 +713,7 @@ fn tab_methods_round_trip_over_socket() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -840,7 +836,7 @@ fn pane_info_reports_foreground_cwd_without_changing_pane_cwd() {
     fs::create_dir_all(&foreground).unwrap();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr_with_shell(&config_home, &runtime_dir, &socket_path, "/bin/bash");
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -1000,7 +996,7 @@ fn new_terminal_cwd_follow_ignores_nonleader_group_member_cwd() {
     fs::create_dir_all(&helper_cwd).unwrap();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr_with_shell(&config_home, &runtime_dir, &socket_path, "/bin/bash");
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -1136,7 +1132,7 @@ fn agent_start_targets_existing_pane_over_socket() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin = base.join("bin");
     fs::create_dir_all(&bin).unwrap();
     let fake_pi = bin.join("pi");
@@ -1215,7 +1211,7 @@ fn agent_methods_round_trip_over_socket() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -1379,7 +1375,7 @@ fn tab_create_with_no_focus_preserves_active_tab() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -1438,7 +1434,7 @@ fn events_subscribe_streams_workspace_tab_and_agent_events() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin_dir = base.join("bin");
 
     fs::create_dir_all(&bin_dir).unwrap();
@@ -1583,7 +1579,7 @@ fn events_subscribe_streams_pane_split_and_close_events() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -1666,7 +1662,7 @@ fn events_subscribe_streams_tab_and_workspace_close_events() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -1750,7 +1746,7 @@ fn pane_report_agent_updates_effective_state() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin_dir = base.join("bin");
 
     fs::create_dir_all(&bin_dir).unwrap();
@@ -1851,10 +1847,7 @@ fn pane_report_agent_updates_effective_state() {
     );
     assert_eq!(pane["result"]["pane"]["agent"], "pi");
     assert_eq!(pane["result"]["pane"]["agent_status"], "working");
-    assert_eq!(
-        pane["result"]["pane"]["agent_session"]["source"],
-        "herdr:pi"
-    );
+    assert_eq!(pane["result"]["pane"]["agent_session"]["source"], "vcer:pi");
     assert_eq!(pane["result"]["pane"]["agent_session"]["agent"], "pi");
     assert_eq!(pane["result"]["pane"]["agent_session"]["kind"], "path");
     assert_eq!(
@@ -1865,7 +1858,7 @@ fn pane_report_agent_updates_effective_state() {
     let metadata = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_hook_metadata","method":"pane.report_metadata","params":{{"pane_id":"{}","source":"user:pi-display","agent":"pi","applies_to_source":"herdr:pi","title":"Refactor auth","display_agent":"Pi auth","state_labels":{{"working":"deep in the mines"}},"tokens":{{"summary":"reviewing auth","model":"opus"}}}}}}"#,
+            r#"{{"id":"req_hook_metadata","method":"pane.report_metadata","params":{{"pane_id":"{}","source":"user:pi-display","agent":"pi","applies_to_source":"vcer:pi","title":"Refactor auth","display_agent":"Pi auth","state_labels":{{"working":"deep in the mines"}},"tokens":{{"summary":"reviewing auth","model":"opus"}}}}}}"#,
             pane_id
         ),
     );
@@ -1902,7 +1895,7 @@ fn pane_report_agent_updates_effective_state() {
     assert_eq!(agent["result"]["agent"]["agent"], "pi");
     assert_eq!(
         agent["result"]["agent"]["agent_session"]["source"],
-        "herdr:pi"
+        "vcer:pi"
     );
     assert_eq!(agent["result"]["agent"]["agent_session"]["agent"], "pi");
     assert_eq!(agent["result"]["agent"]["agent_session"]["kind"], "path");
@@ -1968,7 +1961,7 @@ fn pane_report_agent_accepts_unknown_agent_labels() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
 
@@ -2013,7 +2006,7 @@ fn official_release_waits_for_confirmed_process_exit() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin_dir = base.join("bin");
 
     fs::create_dir_all(&bin_dir).unwrap();
@@ -2172,7 +2165,7 @@ fn pane_clear_agent_authority_restores_fallback_state() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin_dir = base.join("bin");
 
     fs::create_dir_all(&bin_dir).unwrap();
@@ -2293,7 +2286,7 @@ fn events_subscribe_streams_output_and_agent_status_events() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin_dir = base.join("bin");
 
     fs::create_dir_all(&bin_dir).unwrap();
@@ -2417,7 +2410,7 @@ fn pane_info_and_subscriptions_expose_done_agent_status() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let bin_dir = base.join("bin");
 
     fs::create_dir_all(&bin_dir).unwrap();
@@ -2567,7 +2560,7 @@ fn metadata_status_subscription_filter_and_ttl_expiry_are_observable() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));

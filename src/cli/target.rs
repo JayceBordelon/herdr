@@ -171,7 +171,7 @@ pub(super) fn remote_error(error: io::Error) -> io::Error {
 
 pub(super) fn restart_guidance() -> String {
     TARGET.with(|target| match target.borrow().as_ref() {
-        Some(target) => format!("Update Herdr and restart the server on machine '{}' (session {}). Stopping the server exits its pane processes.", target.profile.label, target.profile.session),
+        Some(target) => format!("Update vcer and restart the server on machine '{}' (session {}). Stopping the server exits its pane processes.", target.profile.label, target.profile.session),
         None => crate::session::active_restart_after_update_guidance(),
     })
 }
@@ -254,7 +254,7 @@ fn parse_machine_prefix(args: &[String]) -> Result<Option<(String, Vec<String>)>
         return Err("--machine cannot be combined with other launch options; it uses the saved machine's session".into());
     }
     if index >= args.len() || args[index] == "--" {
-        return Err("usage: herdr --machine <label-or-id> <command>".into());
+        return Err("usage: vcer --machine <label-or-id> <command>".into());
     }
     let mut cleaned = vec![args[0].clone()];
     cleaned.extend_from_slice(&args[index..]);
@@ -274,7 +274,7 @@ pub(super) fn resolve_machine<'a>(
         let mut matches = profiles.iter().filter(|profile| profile.label == selector);
         let profile = matches
             .next()
-            .ok_or_else(|| format!("unknown machine '{selector}'; use `herdr machine list`"))?;
+            .ok_or_else(|| format!("unknown machine '{selector}'; use `vcer machine list`"))?;
         if matches.next().is_some() {
             return Err(format!(
                 "machine label '{selector}' is ambiguous; use its profile ID"
@@ -345,20 +345,20 @@ mod tests {
     #[test]
     fn machine_prefix_routes_without_consuming_command_payload() {
         for prefix in [args(&["--machine", "mac"]), args(&["--machine=mac"])] {
-            let mut input = args(&["herdr"]);
+            let mut input = args(&["vcer"]);
             input.extend(prefix);
             input.extend(args(&["agent", "prompt", "w4:p1", "--machine"]));
             assert_eq!(
                 parse_machine_prefix(&input).unwrap(),
                 Some((
                     "mac".into(),
-                    args(&["herdr", "agent", "prompt", "w4:p1", "--machine"])
+                    args(&["vcer", "agent", "prompt", "w4:p1", "--machine"])
                 ))
             );
         }
         assert_eq!(
             parse_machine_prefix(&args(&[
-                "herdr",
+                "vcer",
                 "agent",
                 "prompt",
                 "w4:p1",
@@ -372,12 +372,12 @@ mod tests {
     #[test]
     fn machine_prefix_rejects_missing_target_and_conflicting_global_options() {
         for input in [
-            args(&["herdr", "--machine"]),
-            args(&["herdr", "--machine="]),
-            args(&["herdr", "--machine", "--help"]),
-            args(&["herdr", "--machine", "mac"]),
+            args(&["vcer", "--machine"]),
+            args(&["vcer", "--machine="]),
+            args(&["vcer", "--machine", "--help"]),
+            args(&["vcer", "--machine", "mac"]),
             args(&[
-                "herdr",
+                "vcer",
                 "--machine",
                 "mac",
                 "--machine",
@@ -386,7 +386,7 @@ mod tests {
                 "list",
             ]),
             args(&[
-                "herdr",
+                "vcer",
                 "--machine",
                 "mac",
                 "--session",
@@ -395,7 +395,7 @@ mod tests {
                 "list",
             ]),
             args(&[
-                "herdr",
+                "vcer",
                 "--session",
                 "other",
                 "--machine",
@@ -404,7 +404,7 @@ mod tests {
                 "list",
             ]),
             args(&[
-                "herdr",
+                "vcer",
                 "--remote",
                 "other",
                 "--machine",
@@ -454,7 +454,7 @@ mod tests {
             &["api", "schema", "--output", "schema.json"],
             &["status", "client"],
         ] {
-            let mut input = args(&["herdr"]);
+            let mut input = args(&["vcer"]);
             input.extend(args(command));
             assert!(validate_machine_command(&input).is_err(), "{input:?}");
         }
@@ -468,7 +468,7 @@ mod tests {
             &["api", "snapshot"],
             &["server", "stop"],
         ] {
-            let mut input = args(&["herdr"]);
+            let mut input = args(&["vcer"]);
             input.extend(args(command));
             assert!(validate_machine_command(&input).is_ok(), "{input:?}");
         }

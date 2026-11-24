@@ -289,7 +289,7 @@ pub(crate) fn local_server_connection_error(error: std::io::Error) -> std::io::E
         error.kind(),
         format!(
             "For an elevated server, use an administrator terminal. Sharing with ordinary \
-             clients requires stopping it there and restarting its `herdr server` command \
+             clients requires stopping it there and restarting its `vcer server` command \
              with --allow-unelevated-clients (closes panes). {error}"
         ),
     )
@@ -880,7 +880,7 @@ pub(crate) fn create_remote_ssh_config_dir(_control_socket_name: &str) -> std::i
     }
     Err(std::io::Error::new(
         std::io::ErrorKind::AlreadyExists,
-        "failed to create private herdr ssh config directory",
+        "failed to create private vcer ssh config directory",
     ))
 }
 

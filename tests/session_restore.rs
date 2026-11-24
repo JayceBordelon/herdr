@@ -62,16 +62,16 @@ fn server_restores_while_git_metadata_is_blocked() {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let base = PathBuf::from(format!("/tmp/herdr-restore-{}-{nonce}", std::process::id()));
+        let base = PathBuf::from(format!("/tmp/vcer-restore-{}-{nonce}", std::process::id()));
         fs::create_dir_all(&base).unwrap();
         let base = fs::canonicalize(base).unwrap();
         let config_home = base.join("config");
         let runtime_dir = base.join("runtime");
-        let socket_path = runtime_dir.join("herdr.sock");
+        let socket_path = runtime_dir.join("vcer.sock");
         let data_dir = config_home.join(if cfg!(debug_assertions) {
             "vcer-dev"
         } else {
-            "herdr"
+            "vcer"
         });
         let repo = base.join("repo");
         fs::create_dir_all(repo.join(".git/objects")).unwrap();
@@ -143,7 +143,7 @@ fn server_restores_while_git_metadata_is_blocked() {
             .spawn()
             .unwrap();
         support::register_spawned_herdr_pid(Some(child.id()));
-        let mut herdr = RestoredServer { child, base };
+        let mut vcer = RestoredServer { child, base };
         support::wait_for_socket(&socket_path, Duration::from_secs(5));
 
         let workspaces = restore_request(&socket_path, "workspace.list");
@@ -201,7 +201,7 @@ fn server_restores_while_git_metadata_is_blocked() {
         restore_request(&socket_path, "server.stop");
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
-            if let Some(status) = herdr.child.try_wait().unwrap() {
+            if let Some(status) = vcer.child.try_wait().unwrap() {
                 assert!(status.success());
                 break;
             }
@@ -221,6 +221,6 @@ fn server_restores_while_git_metadata_is_blocked() {
             saved["workspaces"][0]["worktree_space"],
             snapshot["workspaces"][0]["worktree_space"]
         );
-        drop(herdr);
+        drop(vcer);
     }
 }

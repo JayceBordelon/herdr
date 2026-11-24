@@ -1025,7 +1025,7 @@ fn plan_running_server_updates(
             }
             None if client_protocol_server_is_running_at(&target.client_socket_path) => {
                 return Err(format!(
-                    "herdr target {} has a client socket, but its status API did not respond at {}. stop it with `{}` and run `herdr update` again",
+                    "vcer target {} has a client socket, but its status API did not respond at {}. stop it with `{}` and run `vcer update` again",
                     target.label,
                     target.socket_path.display(),
                     target.stop_command
@@ -1084,7 +1084,7 @@ fn running_update_targets() -> Result<Vec<RunningUpdateTarget>, String> {
             name: None,
             label: socket_path.display().to_string(),
             stop_command: format!(
-                "{}={} herdr server stop",
+                "{}={} vcer server stop",
                 crate::api::SOCKET_PATH_ENV_VAR,
                 socket_path.display()
             ),
@@ -1099,7 +1099,7 @@ fn running_update_targets() -> Result<Vec<RunningUpdateTarget>, String> {
     }
 
     let sessions = crate::session::list_sessions()
-        .map_err(|err| format!("failed to list herdr sessions: {err}"))?;
+        .map_err(|err| format!("failed to list vcer sessions: {err}"))?;
     Ok(sessions
         .into_iter()
         .map(|session| RunningUpdateTarget {
@@ -1116,7 +1116,7 @@ fn running_update_targets() -> Result<Vec<RunningUpdateTarget>, String> {
             attach_command: Some(if session.default {
                 "herdr".to_string()
             } else {
-                format!("herdr session attach {}", session.name)
+                format!("vcer session attach {}", session.name)
             }),
             label: session.name.clone(),
             client_socket_path: crate::session::client_socket_path_for(if session.default {
@@ -1139,7 +1139,7 @@ fn target_client_protocol_server_is_running() -> Result<bool, String> {
     }
 
     let sessions = crate::session::list_sessions()
-        .map_err(|err| format!("failed to list herdr sessions: {err}"))?;
+        .map_err(|err| format!("failed to list vcer sessions: {err}"))?;
     Ok(sessions.into_iter().any(|session| {
         let client_socket = crate::session::client_socket_path_for(if session.default {
             None
@@ -1452,7 +1452,7 @@ fn prompt_to_stop_old_server_after_failed_handoff(
     eprintln!("  server: v{}", version_label(status.version.as_deref()));
     eprintln!("  installed: {}", release.label());
     eprintln!(
-        "you can keep using the old server, or stop it now so the next `herdr` start uses {}.",
+        "you can keep using the old server, or stop it now so the next `vcer` start uses {}.",
         release.label()
     );
     eprintln!("stopping the old server will exit its pane processes.");
@@ -2851,16 +2851,16 @@ mod tests {
         let default = KeptServer {
             label: "default",
             version: "0.9.1",
-            stop_command: "herdr server stop",
-            attach_command: Some("herdr"),
+            stop_command: "vcer server stop",
+            attach_command: Some("vcer"),
         };
         assert_eq!(
             kept_server_notice_lines(&[default], "0.10.0"),
             [
                 "",
-                "your running server is still v0.9.1. run `herdr` to reconnect; everything keeps working.",
+                "your running server is still v0.9.1. run `vcer` to reconnect; everything keeps working.",
                 "server fixes in v0.10.0 apply only after it restarts.",
-                "when your agents are idle, run `herdr server stop`, then `herdr`.",
+                "when your agents are idle, run `vcer server stop`, then `vcer`.",
                 "this closes running panes and their agents.",
             ]
         );
@@ -2868,14 +2868,14 @@ mod tests {
         let work = KeptServer {
             label: "work",
             version: "0.9.0",
-            stop_command: "herdr session stop work",
-            attach_command: Some("herdr session attach work"),
+            stop_command: "vcer session stop work",
+            attach_command: Some("vcer session attach work"),
         };
         let default = KeptServer {
             label: "default",
             version: "0.9.1",
-            stop_command: "herdr server stop",
-            attach_command: Some("herdr"),
+            stop_command: "vcer server stop",
+            attach_command: Some("vcer"),
         };
         assert_eq!(
             kept_server_notice_lines(&[default, work], "0.10.0"),
@@ -2883,8 +2883,8 @@ mod tests {
                 "",
                 "your running servers are still older. reconnect as usual; everything keeps working.",
                 "server fixes in v0.10.0 apply only after each one restarts:",
-                "  default  v0.9.1  `herdr server stop`, then `herdr`",
-                "  work     v0.9.0  `herdr session stop work`, then `herdr session attach work`",
+                "  default  v0.9.1  `vcer server stop`, then `vcer`",
+                "  work     v0.9.0  `vcer session stop work`, then `vcer session attach work`",
                 "restart one when its agents are idle. this closes its panes and their agents.",
             ]
         );
@@ -2893,13 +2893,13 @@ mod tests {
         let socket_override = KeptServer {
             label: "/tmp/herdr.sock",
             version: "0.9.1",
-            stop_command: "herdr server stop",
+            stop_command: "vcer server stop",
             attach_command: None,
         };
         let lines = kept_server_notice_lines(&[socket_override], "0.10.0");
         assert_eq!(
             lines[3],
-            "when your agents are idle, run `herdr server stop`, then herdr with the same socket override."
+            "when your agents are idle, run `vcer server stop`, then herdr with the same socket override."
         );
     }
 
@@ -3406,8 +3406,8 @@ mod tests {
             target: RunningUpdateTarget {
                 name: Some("work".to_string()),
                 label: "work".to_string(),
-                stop_command: "herdr session stop work".to_string(),
-                attach_command: Some("herdr session attach work".to_string()),
+                stop_command: "vcer session stop work".to_string(),
+                attach_command: Some("vcer session attach work".to_string()),
                 socket_path: crate::session::api_socket_path_for(Some("work")),
                 client_socket_path: crate::session::client_socket_path_for(Some("work")),
                 must_be_running: true,
@@ -3550,7 +3550,7 @@ mod tests {
             "unexpected error: {err}"
         );
         assert!(
-            err.contains("herdr session stop work"),
+            err.contains("vcer session stop work"),
             "unexpected error: {err}"
         );
     }
@@ -3629,8 +3629,8 @@ mod tests {
             target: RunningUpdateTarget {
                 name: Some("work".to_string()),
                 label: "work".to_string(),
-                stop_command: "herdr session stop work".to_string(),
-                attach_command: Some("herdr session attach work".to_string()),
+                stop_command: "vcer session stop work".to_string(),
+                attach_command: Some("vcer session attach work".to_string()),
                 socket_path: crate::session::api_socket_path_for(Some("work")),
                 client_socket_path: crate::session::client_socket_path_for(Some("work")),
                 must_be_running: true,
@@ -3665,8 +3665,8 @@ mod tests {
             target: RunningUpdateTarget {
                 name: Some("work".to_string()),
                 label: "work".to_string(),
-                stop_command: "herdr session stop work".to_string(),
-                attach_command: Some("herdr session attach work".to_string()),
+                stop_command: "vcer session stop work".to_string(),
+                attach_command: Some("vcer session attach work".to_string()),
                 socket_path: crate::session::api_socket_path_for(Some("work")),
                 client_socket_path: crate::session::client_socket_path_for(Some("work")),
                 must_be_running: true,

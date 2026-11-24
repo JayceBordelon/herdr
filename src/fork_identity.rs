@@ -86,8 +86,8 @@ mod tests {
     fn vcer_and_custom_sockets_are_kept() {
         let home = Some(Path::new("/home/me"));
         for socket in [
-            "/home/me/.config/vcer/herdr.sock",
-            "/home/me/.config/vcer-dev/herdr.sock",
+            "/home/me/.config/vcer/vcer.sock",
+            "/home/me/.config/vcer-dev/vcer.sock",
             "/tmp/custom.sock",
             "relative.sock",
         ] {

@@ -19,7 +19,7 @@ pub(crate) fn command() -> clap::Command {
 
 const PLUGIN_BUILD_OUTPUT_MAX_BYTES: usize = 64 * 1024;
 const PLUGIN_INSTALL_USAGE: &str =
-    "usage: herdr plugin install [--ref REF] [--yes|-y] <owner>/<repo>[/subdir...]";
+    "usage: vcer plugin install [--ref REF] [--yes|-y] <owner>/<repo>[/subdir...]";
 
 pub(super) fn run_plugin_command(args: &[String]) -> std::io::Result<i32> {
     match args.first().map(String::as_str) {
@@ -30,7 +30,7 @@ pub(super) fn run_plugin_command(args: &[String]) -> std::io::Result<i32> {
         _ => {}
     }
     let (method, json) = match projection::parse(
-        command().bin_name("herdr plugin"),
+        command().bin_name("vcer plugin"),
         args,
         bindings::from_matches,
     ) {
@@ -63,11 +63,11 @@ fn plugin_link(params: PluginLinkParams) -> std::io::Result<i32> {
 
 fn plugin_config_dir_command(args: &[String]) -> std::io::Result<i32> {
     let Some(plugin_id) = args.first() else {
-        eprintln!("usage: herdr plugin config-dir <plugin_id>");
+        eprintln!("usage: vcer plugin config-dir <plugin_id>");
         return Ok(2);
     };
     if args.len() != 1 {
-        eprintln!("usage: herdr plugin config-dir <plugin_id>");
+        eprintln!("usage: vcer plugin config-dir <plugin_id>");
         return Ok(2);
     }
     let path = crate::plugin_paths::plugin_config_dir(plugin_id);
@@ -388,11 +388,11 @@ fn install_github_plugin(
 
 fn plugin_uninstall(args: &[String]) -> std::io::Result<i32> {
     let Some(target) = args.first() else {
-        eprintln!("usage: herdr plugin uninstall <plugin_id|owner/repo[/subdir...]>");
+        eprintln!("usage: vcer plugin uninstall <plugin_id|owner/repo[/subdir...]>");
         return Ok(2);
     };
     if args.len() != 1 {
-        eprintln!("usage: herdr plugin uninstall <plugin_id|owner/repo[/subdir...]>");
+        eprintln!("usage: vcer plugin uninstall <plugin_id|owner/repo[/subdir...]>");
         return Ok(2);
     }
 
@@ -1418,7 +1418,7 @@ mod tests {
                 subdir: subdir.map(str::to_string),
                 requested_ref: None,
                 resolved_commit: Some("abc123".to_string()),
-                managed_path: Some(format!("/tmp/herdr/plugins/{id}")),
+                managed_path: Some(format!("/tmp/vcer/plugins/{id}")),
                 installed_unix_ms: Some(42),
             },
             warnings: vec![],

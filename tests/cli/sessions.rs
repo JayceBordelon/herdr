@@ -132,7 +132,7 @@ fn named_sessions_use_separate_servers_and_workspace_state() {
     assert!(alpha_session["socket_path"]
         .as_str()
         .unwrap()
-        .ends_with("/sessions/alpha/herdr.sock"));
+        .ends_with("/sessions/alpha/vcer.sock"));
     assert!(beta_session["session_dir"]
         .as_str()
         .unwrap()
@@ -210,7 +210,7 @@ fn dead_server_cli_reports_one_session_aware_json_line() {
         assert_eq!(
             response["error"]["message"],
             format!(
-                "no herdr server is running at {}; run `{attach_command}` to start or attach it",
+                "no vcer server is running at {}; run `{attach_command}` to start or attach it",
                 socket_path.display()
             )
         );
@@ -228,7 +228,7 @@ fn dead_server_cli_reports_one_session_aware_json_line() {
         &runtime_dir,
         &["--session", "foo", "workspace", "create"],
     );
-    assert_server_not_running(missing, &named_socket, "herdr session attach foo");
+    assert_server_not_running(missing, &named_socket, "vcer session attach foo");
 
     let stale_socket = runtime_dir.join("stale.sock");
     drop(UnixListener::bind(&stale_socket).unwrap());
@@ -242,7 +242,7 @@ fn dead_server_cli_reports_one_session_aware_json_line() {
         .env_remove("HERDR_ENV")
         .output()
         .unwrap();
-    assert_server_not_running(stale, &stale_socket, "herdr");
+    assert_server_not_running(stale, &stale_socket, "vcer");
 
     cleanup_test_base(&base);
 }
@@ -259,7 +259,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
     register_runtime_dir(&runtime_dir);
     let missing_socket = runtime_dir.join("missing.sock");
 
-    let expected_extension = extensions_dir.join("herdr-agent-state.ts");
+    let expected_extension = extensions_dir.join("vcer-agent-state.ts");
     assert!(
         !expected_extension.exists(),
         "test setup should start without extension file"
@@ -318,8 +318,8 @@ fn integration_status_outdated_only_prints_action_for_legacy_install() {
     let extensions_dir = home_dir.join(".pi/agent/extensions");
     fs::create_dir_all(&extensions_dir).unwrap();
     fs::write(
-        extensions_dir.join("herdr-agent-state.ts"),
-        "// legacy herdr integration\n",
+        extensions_dir.join("vcer-agent-state.ts"),
+        "// legacy vcer integration\n",
     )
     .unwrap();
 
@@ -338,8 +338,8 @@ fn integration_status_outdated_only_prints_action_for_legacy_install() {
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("installed herdr integrations need updating"));
-    assert!(stderr.contains("herdr integration install pi"));
+    assert!(stderr.contains("installed vcer integrations need updating"));
+    assert!(stderr.contains("vcer integration install pi"));
 
     cleanup_test_base(&base);
 }
@@ -371,9 +371,9 @@ fn status_commands_report_client_and_server_versions() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
 
-    let herdr = spawn_herdr(&config_home, &runtime_dir, &socket_path);
+    let vcer = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
 
     let full = run_cli(&socket_path, &["status"]);
@@ -488,7 +488,7 @@ fn status_commands_report_client_and_server_versions() {
         .as_str()
         .is_some_and(|path| !path.is_empty()));
 
-    cleanup_spawned_herdr(herdr, base);
+    cleanup_spawned_herdr(vcer, base);
 }
 
 #[test]
@@ -533,10 +533,10 @@ fn server_stop_command_shuts_down_running_server() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
+    let client_socket = runtime_dir.join("vcer-client.sock");
 
-    let mut herdr = spawn_herdr(&config_home, &runtime_dir, &socket_path);
+    let mut vcer = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
     wait_for_socket(&client_socket, Duration::from_secs(5));
 
@@ -560,12 +560,12 @@ fn server_stop_command_shuts_down_running_server() {
         "client socket should be removed or stale before server stop returns"
     );
 
-    let pid = herdr.child.process_id();
-    let exit_status = herdr.child.wait().unwrap();
+    let pid = vcer.child.process_id();
+    let exit_status = vcer.child.wait().unwrap();
     unregister_spawned_herdr_pid(pid);
     assert!(exit_status.success(), "server stop should exit cleanly");
 
-    cleanup_spawned_herdr(herdr, base);
+    cleanup_spawned_herdr(vcer, base);
 }
 
 #[test]
@@ -573,11 +573,11 @@ fn server_stop_then_restart_restores_pane_history() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
+    let client_socket = runtime_dir.join("vcer-client.sock");
     let marker = "PERSISTED_HISTORY_AFTER_STOP";
 
-    let mut herdr = spawn_herdr_with_pane_history(&config_home, &runtime_dir, &socket_path);
+    let mut vcer = spawn_herdr_with_pane_history(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
     wait_for_socket(&client_socket, Duration::from_secs(5));
 
@@ -619,11 +619,11 @@ fn server_stop_then_restart_restores_pane_history() {
         String::from_utf8_lossy(&stopped.stderr)
     );
 
-    let pid = herdr.child.process_id();
-    let exit_status = herdr.child.wait().unwrap();
+    let pid = vcer.child.process_id();
+    let exit_status = vcer.child.wait().unwrap();
     unregister_spawned_herdr_pid(pid);
     assert!(exit_status.success(), "server stop should exit cleanly");
-    drop(herdr);
+    drop(vcer);
 
     let restarted = spawn_herdr_with_pane_history(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
@@ -665,7 +665,7 @@ fn unloaded_session_survives_autosave_and_shutdown_when_recovery_is_blocked() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let data_dir = config_home.join(app_dir_name());
     fs::create_dir_all(&data_dir).unwrap();
     let session_path = data_dir.join("session.json");
@@ -673,7 +673,7 @@ fn unloaded_session_survives_autosave_and_shutdown_when_recovery_is_blocked() {
     fs::write(&session_path, original).unwrap();
     fs::write(data_dir.join("session-backups"), b"blocks recovery").unwrap();
 
-    let mut herdr = spawn_herdr(&config_home, &runtime_dir, &socket_path);
+    let mut vcer = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
     run_cli_json(
         &socket_path,
@@ -683,18 +683,18 @@ fn unloaded_session_survives_autosave_and_shutdown_when_recovery_is_blocked() {
         Duration::from_secs(10),
         Duration::from_millis(25),
         || {
-            fs::read_to_string(data_dir.join("herdr-server.log"))
+            fs::read_to_string(data_dir.join("vcer-server.log"))
                 .is_ok_and(|log| log.contains("event=\"persist.save\""))
         }
     ));
     assert_eq!(fs::read(&session_path).unwrap(), original);
 
     assert!(run_cli(&socket_path, &["server", "stop"]).status.success());
-    let pid = herdr.child.process_id();
-    assert!(herdr.child.wait().unwrap().success());
+    let pid = vcer.child.process_id();
+    assert!(vcer.child.wait().unwrap().success());
     unregister_spawned_herdr_pid(pid);
     assert_eq!(fs::read(&session_path).unwrap(), original);
-    cleanup_spawned_herdr(herdr, base);
+    cleanup_spawned_herdr(vcer, base);
 }
 
 #[test]
@@ -702,15 +702,15 @@ fn session_appearing_after_startup_is_preserved_before_autosave() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let data_dir = config_home.join(app_dir_name());
-    let herdr = spawn_herdr(&config_home, &runtime_dir, &socket_path);
+    let vcer = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
     // The API socket binds before restore; a read-only App request waits for it.
     let ready = run_cli_json(&socket_path, &["workspace", "list"]);
     assert_eq!(ready["result"]["workspaces"], serde_json::json!([]));
     // The server has already evaluated restore, but has not created any layout.
-    let original = include_bytes!("../fixtures/session/current-herdr-session.json");
+    let original = include_bytes!("../fixtures/session/current-vcer-session.json");
     fs::write(data_dir.join("session.json"), original).unwrap();
     run_cli_json(
         &socket_path,
@@ -720,7 +720,7 @@ fn session_appearing_after_startup_is_preserved_before_autosave() {
         Duration::from_secs(10),
         Duration::from_millis(25),
         || {
-            fs::read_to_string(data_dir.join("herdr-server.log"))
+            fs::read_to_string(data_dir.join("vcer-server.log"))
                 .is_ok_and(|log| log.contains("event=\"persist.save\""))
         }
     ));
@@ -729,7 +729,7 @@ fn session_appearing_after_startup_is_preserved_before_autosave() {
         .map(|entry| fs::read(entry.unwrap().path()).unwrap())
         .collect();
     assert_eq!(backups, vec![original.to_vec()]);
-    cleanup_spawned_herdr(herdr, base);
+    cleanup_spawned_herdr(vcer, base);
 }
 
 #[test]
@@ -737,11 +737,11 @@ fn server_start_restores_legacy_session_through_api_identity() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
+    let client_socket = runtime_dir.join("vcer-client.sock");
     let data_dir = config_home.join(app_dir_name());
     let pion_cwd = base.join("legacy-pion");
-    let herdr_cwd = base.join("legacy-herdr");
+    let herdr_cwd = base.join("legacy-vcer");
 
     fs::create_dir_all(&pion_cwd).unwrap();
     fs::create_dir_all(&herdr_cwd).unwrap();
@@ -750,10 +750,10 @@ fn server_start_restores_legacy_session_through_api_identity() {
     let herdr_cwd = herdr_cwd.to_str().expect("test cwd should be UTF-8");
     let legacy_session = include_str!("../fixtures/session/legacy-pre-tabs-v2.json")
         .replace("/tmp/pion", pion_cwd)
-        .replace("/tmp/herdr", herdr_cwd);
+        .replace("/tmp/vcer", herdr_cwd);
     fs::write(data_dir.join("session.json"), legacy_session).unwrap();
 
-    let herdr = spawn_herdr(&config_home, &runtime_dir, &socket_path);
+    let vcer = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
     wait_for_socket(&client_socket, Duration::from_secs(5));
 
@@ -828,5 +828,5 @@ fn server_start_restores_legacy_session_through_api_identity() {
     assert_eq!(agents[0]["agent"], "pi");
     assert_eq!(agents[0]["agent_status"], "working");
 
-    cleanup_spawned_herdr(herdr, base);
+    cleanup_spawned_herdr(vcer, base);
 }

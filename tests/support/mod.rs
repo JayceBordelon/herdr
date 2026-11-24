@@ -14,7 +14,7 @@ static RUNTIME_DIR_REGISTRY: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new()
 static INIT: Once = Once::new();
 static CLEANUP_GUARD: OnceLock<CleanupGuard> = OnceLock::new();
 const WATCHDOG_SCAN_INTERVAL: Duration = Duration::from_secs(1);
-const RUNTIME_OWNER_MARKER: &str = ".herdr-test-owner-pid";
+const RUNTIME_OWNER_MARKER: &str = ".vcer-test-owner-pid";
 pub const CURRENT_PROTOCOL: u32 = 22;
 pub const CURRENT_ENDPOINT_PROTOCOL_GENERATION: u32 = 1;
 pub const SERVER_MESSAGE_SERVER_SHUTDOWN: u32 = 3;
@@ -41,7 +41,7 @@ pub fn register_spawned_herdr_pid(pid: Option<u32>) {
     registry.insert(pid);
 }
 
-/// Asks a spawned herdr process to exit. portable-pty's `kill` sends SIGHUP,
+/// Asks a spawned vcer process to exit. portable-pty's `kill` sends SIGHUP,
 /// which the server deliberately ignores.
 pub fn stop_spawned_herdr(child: &mut (dyn portable_pty::Child + Send + Sync)) {
     match child.process_id() {
@@ -631,7 +631,7 @@ fn start_global_watchdog() {
         thread::sleep(WATCHDOG_SCAN_INTERVAL);
 
         if let Err(err) = cleanup_servers_with_missing_runtime_dir() {
-            eprintln!("herdr test cleanup watchdog error: {err}");
+            eprintln!("vcer test cleanup watchdog error: {err}");
         }
     });
 }
@@ -874,7 +874,7 @@ mod tests {
             .unwrap_or_default()
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "herdr-watchdog-scoping-{label}-{}-{unique}",
+            "vcer-watchdog-scoping-{label}-{}-{unique}",
             std::process::id()
         ))
     }
@@ -929,14 +929,14 @@ mod tests {
 
     #[test]
     fn test_binary_matcher_rejects_other_binaries() {
-        let nested_build = Path::new(env!("CARGO_MANIFEST_DIR")).join("other/target/debug/herdr");
+        let nested_build = Path::new(env!("CARGO_MANIFEST_DIR")).join("other/target/debug/vcer");
         let sibling_build = Path::new(env!("CARGO_BIN_EXE_vcer"))
             .parent()
             .unwrap()
-            .join("other-build/herdr");
+            .join("other-build/vcer");
         for binary in [
-            Path::new("/home/can/.local/bin/herdr"),
-            Path::new("/tmp/other-checkout/target/debug/herdr"),
+            Path::new("/home/can/.local/bin/vcer"),
+            Path::new("/tmp/other-checkout/target/debug/vcer"),
             nested_build.as_path(),
             sibling_build.as_path(),
         ] {

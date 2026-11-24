@@ -88,7 +88,7 @@ fn server_integrity_requires_startup_consent_on_both_endpoints() {
     };
 
     let directory = std::env::temp_dir().join(format!(
-        "herdr-server-integrity-{}-{}",
+        "vcer-server-integrity-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -103,7 +103,7 @@ fn server_integrity_requires_startup_consent_on_both_endpoints() {
     let app_dir = if cfg!(debug_assertions) {
         "vcer-dev"
     } else {
-        "herdr"
+        "vcer"
     };
     let session_dir = server
         .directory
@@ -111,8 +111,8 @@ fn server_integrity_requires_startup_consent_on_both_endpoints() {
         .join("sessions")
         .join("integrity-test");
     let endpoints = [
-        session_dir.join("herdr.sock"),
-        session_dir.join("herdr-client.sock"),
+        session_dir.join("vcer.sock"),
+        session_dir.join("vcer-client.sock"),
     ];
 
     // Reuse the named session after stopping, proving consent is process-local.

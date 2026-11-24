@@ -48,7 +48,7 @@ pub fn run_server() -> io::Result<()> {
     ) {
         Ok(server) => server,
         Err(err) if err.kind() == io::ErrorKind::AddrInUse => {
-            eprintln!("error: herdr server is already running");
+            eprintln!("error: vcer server is already running");
             eprintln!("api socket: {}", api::socket_path().display());
             std::process::exit(1);
         }
@@ -81,7 +81,7 @@ pub fn run_server() -> io::Result<()> {
         ) {
             Ok(server) => server,
             Err(err) if err.kind() == io::ErrorKind::AddrInUse => {
-                eprintln!("error: herdr server is already running");
+                eprintln!("error: vcer server is already running");
                 eprintln!("client socket: {}", client_socket_path().display());
                 std::process::exit(1);
             }
@@ -91,7 +91,7 @@ pub fn run_server() -> io::Result<()> {
         info!(
             api_socket = %api::socket_path().display(),
             client_socket = %client_socket_path().display(),
-            "herdr server started"
+            "vcer server started"
         );
         print_ready_message(&api::socket_path(), &client_socket_path());
         server.app.run_plugin_startup_hooks();
@@ -223,16 +223,14 @@ fn run_handoff_import_server(_socket_path: &Path, _token: &str) -> io::Result<()
 
 fn print_ready_message(api_socket: &Path, client_socket: &Path) {
     let message = format!(
-        "herdr server running; you can use any herdr CLI command in another terminal.\n\
+        "vcer server running. You can use any vcer CLI command in another terminal.\n\
          api socket: {}\n\
          client socket: {}\n\
          logs: {}\n\
-         did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.\n",
+         did you mean to open the vcer TUI? run `vcer`. You do not need `vcer server`.\n",
         api_socket.display(),
         client_socket.display(),
-        crate::session::data_dir()
-            .join("herdr-server.log")
-            .display()
+        crate::session::data_dir().join("vcer-server.log").display()
     );
     // The launching terminal may already be gone; the server keeps running.
     let _ = io::Write::write_all(&mut io::stderr(), message.as_bytes());
@@ -240,5 +238,5 @@ fn print_ready_message(api_socket: &Path, client_socket: &Path) {
 
 /// Initialize logging for the server process.
 fn init_logging() {
-    crate::logging::init_file_logging("herdr-server.log");
+    crate::logging::init_file_logging("vcer-server.log");
 }

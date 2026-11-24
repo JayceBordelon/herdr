@@ -24,7 +24,7 @@ impl Drop for TestCleanup {
     fn drop(&mut self) {
         if let Some(mut child) = self.child.take() {
             // The child leads a private process group and has not been reaped.
-            // Kill its fake SSH descendants too, not just the Herdr launcher.
+            // Kill its fake SSH descendants too, not just the vcer launcher.
             // SAFETY: the negative PID targets only this test's process group.
             unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL) };
             let _ = child.wait();
@@ -56,7 +56,7 @@ fn check_authentication_output(framed_shell: bool) {
         .expect("system clock after Unix epoch")
         .as_nanos();
     let temp_dir = std::env::temp_dir().join(format!(
-        "herdr-remote-auth-test-{}-{nonce}",
+        "vcer-remote-auth-test-{}-{nonce}",
         std::process::id()
     ));
     let mut cleanup = TestCleanup {

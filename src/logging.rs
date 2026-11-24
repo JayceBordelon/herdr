@@ -19,6 +19,7 @@ pub(crate) fn init_file_logging(file_name: &str) {
         return;
     };
 
+    // Tracing targets follow the bin target name (vcer), not the package name.
     let filter =
         EnvFilter::try_from_env("HERDR_LOG").unwrap_or_else(|_| EnvFilter::new("vcer=info"));
 
@@ -33,8 +34,8 @@ pub(crate) fn init_file_logging(file_name: &str) {
 pub(crate) fn help_log_paths_summary() -> String {
     let dir = crate::session::data_dir();
     format!(
-        "{} (plus herdr-client.log, herdr-server.log)",
-        dir.join("herdr.log").display()
+        "{} (plus vcer-client.log, vcer-server.log)",
+        dir.join("vcer.log").display()
     )
 }
 
@@ -44,7 +45,7 @@ pub(crate) fn startup(role: &'static str) {
         subsystem = role,
         outcome = "started",
         pid = std::process::id(),
-        "herdr starting"
+        "vcer starting"
     );
 }
 
@@ -54,7 +55,7 @@ pub(crate) fn shutdown(role: &'static str) {
         subsystem = role,
         outcome = "completed",
         pid = std::process::id(),
-        "herdr exiting"
+        "vcer exiting"
     );
 }
 
@@ -562,7 +563,7 @@ mod tests {
 
     fn temp_log_path(name: &str) -> PathBuf {
         let unique = format!(
-            "herdr-logging-tests-{}-{}-{}",
+            "vcer-logging-tests-{}-{}-{}",
             name,
             std::process::id(),
             std::time::SystemTime::now()
@@ -570,16 +571,13 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         );
-        std::env::temp_dir().join(unique).join("herdr.log")
+        std::env::temp_dir().join(unique).join("vcer.log")
     }
 
     #[test]
     fn rotated_log_path_appends_numeric_suffix() {
-        let path = PathBuf::from("/tmp/herdr.log");
-        assert_eq!(
-            rotated_log_path(&path, 2),
-            PathBuf::from("/tmp/herdr.log.2")
-        );
+        let path = PathBuf::from("/tmp/vcer.log");
+        assert_eq!(rotated_log_path(&path, 2), PathBuf::from("/tmp/vcer.log.2"));
     }
 
     #[test]
@@ -618,7 +616,7 @@ mod tests {
         let dir = path.parent().unwrap().to_path_buf();
         fs::create_dir_all(&dir).unwrap();
 
-        let writer = RotatingFileMakeWriter::new(dir.clone(), "herdr.log", 8, 0).unwrap();
+        let writer = RotatingFileMakeWriter::new(dir.clone(), "vcer.log", 8, 0).unwrap();
         {
             let mut guard = writer.make_writer();
             guard.write_all(b"12345678").unwrap();

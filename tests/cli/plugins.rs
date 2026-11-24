@@ -838,7 +838,7 @@ fn plugin_link_list_unlink_cli_smoke_test() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("vcer.sock");
     let plugin_dir = base.join("plugins").join("layout");
     fs::create_dir_all(&plugin_dir).unwrap();
     fs::write(
@@ -848,7 +848,7 @@ id = "example.layout"
 name = "Layout"
 version = "0.1.0"
 min_herdr_version = "0.6.10"
-description = "Apply a preferred Herdr layout"
+description = "Apply a preferred vcer layout"
 
 [[actions]]
 id = "apply"
@@ -869,7 +869,7 @@ command = ["sh", "-c", "sleep 5"]
     )
     .unwrap();
 
-    let herdr = spawn_herdr(&config_home, &runtime_dir, &socket_path);
+    let vcer = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     wait_for_socket(&socket_path, Duration::from_secs(5));
     let workspace = run_cli_json(
         &socket_path,
@@ -970,7 +970,7 @@ command = ["sh", "-c", "sleep 5"]
     let listed = run_cli_json(&socket_path, &["plugin", "list", "--json"]);
     assert!(listed["result"]["plugins"].as_array().unwrap().is_empty());
 
-    cleanup_spawned_herdr(herdr, base);
+    cleanup_spawned_herdr(vcer, base);
 }
 
 #[test]
@@ -993,7 +993,7 @@ fn plugin_install_usage_errors_include_options_without_installing() {
         );
         assert_eq!(output.status.code(), Some(2), "{args:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("usage: herdr plugin install"), "{stderr}");
+        assert!(stderr.contains("usage: vcer plugin install"), "{stderr}");
         assert!(stderr.contains("[--ref REF] [--yes|-y]"), "{stderr}");
         assert!(!config_home.join("vcer-dev/plugins").exists());
         assert!(!config_home.join("vcer-dev/plugins.json").exists());
@@ -1254,7 +1254,7 @@ min_herdr_version = "0.6.10"
 platforms = ["linux", "macos", "windows"]
 
 [[build]]
-command = ["definitely-missing-herdr-build-tool-xyz"]
+command = ["definitely-missing-vcer-build-tool-xyz"]
 
 [[actions]]
 id = "run"
@@ -1307,7 +1307,7 @@ command = ["sh", "-c", "echo should-not-install"]
     );
     assert!(stderr.contains("  build: 1/1"), "{stderr}");
     assert!(
-        stderr.contains("  command: definitely-missing-herdr-build-tool-xyz"),
+        stderr.contains("  command: definitely-missing-vcer-build-tool-xyz"),
         "{stderr}"
     );
     assert!(stderr.contains("  error: failed to start:"), "{stderr}");

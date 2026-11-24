@@ -650,7 +650,7 @@ impl App {
         );
         if version_check_enabled {
             let update_tx = event_tx.clone();
-            if let Err(err) = crate::thread_spawn::spawn_named("herdr-update-check", move || {
+            if let Err(err) = crate::thread_spawn::spawn_named("vcer-update-check", move || {
                 crate::update::auto_update(update_tx)
             }) {
                 tracing::warn!(err = %err, "failed to spawn update check thread");
@@ -658,7 +658,7 @@ impl App {
         }
         if manifest_check_enabled {
             let manifest_update_tx = event_tx.clone();
-            if let Err(err) = crate::thread_spawn::spawn_named("herdr-manifest-check", move || {
+            if let Err(err) = crate::thread_spawn::spawn_named("vcer-manifest-check", move || {
                 crate::detect::manifest_update::auto_update(manifest_update_tx)
             }) {
                 tracing::warn!(err = %err, "failed to spawn agent manifest check thread");
@@ -992,7 +992,7 @@ impl App {
                 != self.startup_per_agent_delay
         {
             diagnostics.push(
-                "session.startup_per_agent_delay_ms changes require restarting Herdr; kept current setting"
+                "session.startup_per_agent_delay_ms changes require restarting vcer; kept current setting"
                     .into(),
             );
         }
@@ -1003,7 +1003,7 @@ impl App {
             && config.kitty_graphics_enabled() != self.state.kitty_graphics_enabled
         {
             diagnostics.push(
-                "terminal.kitty_graphics changes require restarting Herdr; kept current setting"
+                "terminal.kitty_graphics changes require restarting vcer; kept current setting"
                     .into(),
             );
         }
@@ -1147,7 +1147,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("herdr-{name}-{}-{stamp}", std::process::id()))
+        std::env::temp_dir().join(format!("vcer-{name}-{}-{stamp}", std::process::id()))
     }
 
     fn config_env_lock() -> &'static Mutex<()> {
@@ -1156,7 +1156,7 @@ mod tests {
 
     fn temp_config_path(name: &str) -> std::path::PathBuf {
         let unique = format!(
-            "herdr-{name}-{}-{}",
+            "vcer-{name}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1425,7 +1425,7 @@ mod tests {
             app.event_tx
                 .try_send(AppEvent::UpdateReady {
                     version: format!("2.0.{i}"),
-                    install_command: "herdr install".into(),
+                    install_command: "vcer install".into(),
                 })
                 .unwrap();
         }
@@ -1447,7 +1447,7 @@ mod tests {
             app.event_tx
                 .try_send(AppEvent::UpdateReady {
                     version: format!("3.0.{i}"),
-                    install_command: "herdr install".into(),
+                    install_command: "vcer install".into(),
                 })
                 .unwrap();
         }
@@ -1664,7 +1664,7 @@ mod tests {
         crate::release_notes::save_pending("99.99.99", "### Changed\n- One").unwrap();
         app.handle_internal_event(AppEvent::UpdateReady {
             version: "99.99.99".into(),
-            install_command: "herdr update".into(),
+            install_command: "vcer update".into(),
         });
 
         assert_eq!(
@@ -1893,7 +1893,7 @@ mod tests {
         assert_eq!(
             report.diagnostics,
             vec![
-                "terminal.kitty_graphics changes require restarting Herdr; kept current setting"
+                "terminal.kitty_graphics changes require restarting vcer; kept current setting"
                     .to_owned()
             ]
         );
@@ -1914,7 +1914,7 @@ mod tests {
         assert_eq!(report.status, crate::config::ConfigReloadStatus::Partial);
         assert_eq!(app.startup_per_agent_delay, Duration::from_millis(100));
         assert_eq!(report.diagnostics, vec![
-            "session.startup_per_agent_delay_ms changes require restarting Herdr; kept current setting"
+            "session.startup_per_agent_delay_ms changes require restarting vcer; kept current setting"
         ]);
 
         let report = app.apply_live_config(&config, &[], &["session".into()], false);
@@ -2073,7 +2073,7 @@ mod tests {
         );
         assert_eq!(
             app.state.config_diagnostic.as_deref(),
-            Some("config.toml; herdr config check")
+            Some("config.toml; vcer config check")
         );
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
@@ -2135,7 +2135,7 @@ mod tests {
         assert_eq!(app.state.pane_borders, target_pane_borders);
         assert_eq!(
             app.state.config_diagnostic.as_deref(),
-            Some("config.toml has unknown keys; herdr config check")
+            Some("config.toml has unknown keys; vcer config check")
         );
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
@@ -2264,7 +2264,7 @@ mod tests {
             .config_diagnostic
             .as_deref()
             .is_some_and(|message| {
-                message == "config.toml invalid; keeping current config; herdr config check"
+                message == "config.toml invalid; keeping current config; vcer config check"
             }));
         assert!(app.state.toast.is_none());
 
@@ -2485,8 +2485,8 @@ mod tests {
     #[test]
     fn workspace_creation_in_navigate_mode_uses_selected_workspace_seed_cwd() {
         let mut app = test_app();
-        let mut first = Workspace::test_new("herdr");
-        first.identity_cwd = std::path::PathBuf::from("/tmp/herdr");
+        let mut first = Workspace::test_new("vcer");
+        first.identity_cwd = std::path::PathBuf::from("/tmp/vcer");
         let mut second = Workspace::test_new("pion");
         second.identity_cwd = std::path::PathBuf::from("/tmp/pion");
 
@@ -2506,10 +2506,10 @@ mod tests {
     fn new_terminal_cwd_follow_uses_source_cwd() {
         let cwd = creation::resolve_new_terminal_cwd(
             &crate::config::NewTerminalCwdConfig::Follow,
-            Some(std::path::PathBuf::from("/tmp/herdr-source")),
+            Some(std::path::PathBuf::from("/tmp/vcer-source")),
         );
 
-        assert_eq!(cwd, std::path::PathBuf::from("/tmp/herdr-source"));
+        assert_eq!(cwd, std::path::PathBuf::from("/tmp/vcer-source"));
     }
 
     #[test]
@@ -2527,11 +2527,11 @@ mod tests {
     #[test]
     fn new_terminal_cwd_path_uses_configured_path() {
         let cwd = creation::resolve_new_terminal_cwd(
-            &crate::config::NewTerminalCwdConfig::Path("/tmp/herdr-fixed".into()),
-            Some(std::path::PathBuf::from("/tmp/herdr-source")),
+            &crate::config::NewTerminalCwdConfig::Path("/tmp/vcer-fixed".into()),
+            Some(std::path::PathBuf::from("/tmp/vcer-source")),
         );
 
-        assert_eq!(cwd, std::path::PathBuf::from("/tmp/herdr-fixed"));
+        assert_eq!(cwd, std::path::PathBuf::from("/tmp/vcer-fixed"));
     }
 
     #[test]
@@ -3189,17 +3189,17 @@ mod tests {
         let mut parent = Workspace::test_new("api-pane-close-parent");
         parent.worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
-            repo_root: "/repo/herdr".into(),
-            checkout_path: "/repo/herdr".into(),
+            label: "vcer".into(),
+            repo_root: "/repo/vcer".into(),
+            checkout_path: "/repo/vcer".into(),
             is_linked_worktree: false,
         });
         let mut child = Workspace::test_new("api-pane-close-child");
         child.worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
-            repo_root: "/repo/herdr".into(),
-            checkout_path: "/repo/herdr-child".into(),
+            label: "vcer".into(),
+            repo_root: "/repo/vcer".into(),
+            checkout_path: "/repo/vcer-child".into(),
             is_linked_worktree: true,
         });
         app.state.workspaces = vec![parent, child];
@@ -3546,7 +3546,7 @@ mod tests {
             app.event_tx
                 .try_send(AppEvent::UpdateReady {
                     version: format!("9.9.{i}"),
-                    install_command: "herdr update".into(),
+                    install_command: "vcer update".into(),
                 })
                 .unwrap();
         }

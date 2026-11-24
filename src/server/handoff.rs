@@ -62,7 +62,7 @@ pub(crate) struct ReceivedHandoff {
 
 #[cfg(unix)]
 pub(crate) fn handoff_socket_path() -> PathBuf {
-    crate::session::data_dir().join(format!("herdr-handoff-{}.sock", std::process::id()))
+    crate::session::data_dir().join(format!("vcer-handoff-{}.sock", std::process::id()))
 }
 
 #[cfg(unix)]

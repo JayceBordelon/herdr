@@ -64,7 +64,7 @@ case "$last" in
         script=$(cat)
         printf 'login banner\n'
         case "$script" in
-            *'uname -s'*) printf 'herdr-remote-output-ready:1\n'; uname -s; uname -m ;;
+            *'uname -s'*) printf 'vcer-remote-output-ready:1\n'; uname -s; uname -m ;;
             *) PATH="$TEST_ROOT/remote bin:/usr/bin:/bin" exec /bin/sh -c "$script" ;;
         esac ;;
     *) echo "unexpected command: $last" >&2; exit 2 ;;
@@ -90,7 +90,7 @@ impl Harness {
         let app = if cfg!(debug_assertions) {
             "vcer-dev"
         } else {
-            "herdr"
+            "vcer"
         };
         let state = root.join("state").join(app).join("client");
         let session = root.join("config").join(app).join("sessions/fleet");
@@ -99,9 +99,9 @@ impl Harness {
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::write(root.join("bin/ssh"), SSH).unwrap();
         fs::set_permissions(root.join("bin/ssh"), fs::Permissions::from_mode(0o700)).unwrap();
-        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_vcer"), root.join("remote herdr")).unwrap();
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_vcer"), root.join("remote vcer")).unwrap();
         fs::create_dir_all(root.join("remote bin")).unwrap();
-        let remote_wrapper = root.join("remote bin/herdr");
+        let remote_wrapper = root.join("remote bin/vcer");
         fs::write(
             &remote_wrapper,
             r#"#!/bin/sh
@@ -122,7 +122,7 @@ exec "$TEST_REMOTE_HERDR" "$@"
             "version": 1,
             "ssh": [{"id": PROFILE_ID, "label": "mac", "target": "fake-mac", "session": "fleet", "enabled": true}]
         })).unwrap()).unwrap();
-        let remote = UnixListener::bind(session.join("herdr.sock")).unwrap();
+        let remote = UnixListener::bind(session.join("vcer.sock")).unwrap();
         remote.set_nonblocking(true).unwrap();
         let local = UnixListener::bind(root.join("local.sock")).unwrap();
         local.set_nonblocking(true).unwrap();
@@ -153,7 +153,7 @@ exec "$TEST_REMOTE_HERDR" "$@"
             .env("XDG_STATE_HOME", self.root.join("state"))
             .env("XDG_RUNTIME_DIR", &self.root)
             .env("TEST_ROOT", &self.root)
-            .env("TEST_REMOTE_HERDR", self.root.join("remote herdr"))
+            .env("TEST_REMOTE_HERDR", self.root.join("remote vcer"))
             .env("HERDR_SOCKET_PATH", self.root.join("local.sock"))
             .env(
                 "HERDR_CLIENT_SOCKET_PATH",
@@ -340,7 +340,7 @@ fn machine_api_bootstrap_falls_back_from_an_old_path_binary() {
     fs::create_dir_all(harness.root.join(".local/bin")).unwrap();
     std::os::unix::fs::symlink(
         env!("CARGO_BIN_EXE_vcer"),
-        harness.root.join(".local/bin/herdr"),
+        harness.root.join(".local/bin/vcer"),
     )
     .unwrap();
     let server = harness.serve(
@@ -408,11 +408,11 @@ fn machine_api_reuses_discovery_across_commands_without_rewriting_profiles() {
 fn machine_api_recovers_a_stale_path_before_sending_a_mutation() {
     let harness = Harness::new();
     harness.warm_metadata();
-    fs::remove_file(harness.root.join("remote bin/herdr")).unwrap();
+    fs::remove_file(harness.root.join("remote bin/vcer")).unwrap();
     fs::create_dir_all(harness.root.join(".local/bin")).unwrap();
     std::os::unix::fs::symlink(
         env!("CARGO_BIN_EXE_vcer"),
-        harness.root.join(".local/bin/herdr"),
+        harness.root.join(".local/bin/vcer"),
     )
     .unwrap();
     let before = harness.ssh_calls();
@@ -623,14 +623,14 @@ fn machine_api_remote_paths_and_wait_parameters_reach_the_server() {
                 "worktree",
                 "create",
                 "--cwd",
-                "~/Projects/herdr",
+                "~/Projects/vcer",
                 "--branch",
                 "review",
                 "--path",
                 "/srv/review",
             ],
             "worktree.create",
-            json!({"cwd":"~/Projects/herdr", "branch":"review", "path":"/srv/review"}),
+            json!({"cwd":"~/Projects/vcer", "branch":"review", "path":"/srv/review"}),
         ),
         (
             vec![
@@ -723,7 +723,7 @@ fn machine_api_usage_errors_do_not_connect() {
 #[test]
 fn machine_api_rejects_old_bridges_and_disconnected_machines() {
     for (mode, message) in [
-        ("old", "update Herdr"),
+        ("old", "update vcer"),
         ("offline", "test remote connection failed"),
     ] {
         let harness = Harness::new();
