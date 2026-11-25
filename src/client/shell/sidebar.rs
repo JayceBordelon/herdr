@@ -216,49 +216,42 @@ pub(crate) fn render_sidebar(
     } else {
         Rect::new(area.x, area.y, 1, area.height)
     };
-    let (agent_area, workspace_area) =
-        crate::ui::expanded_sidebar_sections(area, state.sidebar_section_split);
-    hits.sidebar_section_divider =
-        crate::ui::sidebar_section_divider_rect(area, state.sidebar_section_split);
-    super::super::agent_sidebar::render_peer_message_feed(
-        buffer,
-        Rect::new(
-            workspace_area.x,
-            workspace_area.y,
-            workspace_area.width,
-            workspace_area.height.saturating_sub(1),
-        ),
-        &snapshot.peer_messages,
-        &snapshot.agents,
-        config,
+    // The agent panel owns the whole sidebar, leaving one row for the footer.
+    hits.sidebar_section_divider = Rect::default();
+    let content = crate::ui::sidebar_content(area);
+    let agent_area = Rect::new(
+        content.x,
+        content.y,
+        content.width,
+        content.height.saturating_sub(1),
     );
 
-    let footer_y = workspace_area.bottom().saturating_sub(1);
+    let footer_y = content.bottom().saturating_sub(1);
     if config.mouse_capture {
         hits.new_workspace = Rect::new(
-            workspace_area.x,
+            content.x,
             footer_y,
-            5.min(workspace_area.width),
-            u16::from(workspace_area.height > 0),
+            5.min(content.width),
+            u16::from(content.height > 0),
         );
         put_text(
             buffer,
-            workspace_area.x,
+            content.x,
             footer_y,
-            workspace_area.width,
+            content.width,
             " new",
             Style::default().fg(palette.overlay0),
         );
         let attention = super::super::global_menu::global_menu_attention(snapshot);
-        let launcher_width = if attention { 8 } else { 6 }.min(workspace_area.width);
+        let launcher_width = if attention { 8 } else { 6 }.min(content.width);
         hits.global_launcher = Rect::new(
-            workspace_area.right().saturating_sub(launcher_width),
+            content.right().saturating_sub(launcher_width),
             footer_y,
             launcher_width,
             1,
         );
         if attention {
-            let start_x = workspace_area.right().saturating_sub(6);
+            let start_x = content.right().saturating_sub(6);
             put_text(
                 buffer,
                 start_x,
@@ -280,7 +273,7 @@ pub(crate) fn render_sidebar(
         } else {
             put_right_text(
                 buffer,
-                workspace_area,
+                content,
                 footer_y,
                 "menu",
                 Style::default().fg(palette.overlay0),

@@ -412,6 +412,7 @@ impl ClientShellConfig {
         sidebar_collapsed: bool,
         tab_count: usize,
         sidebar_width: u16,
+        sidebar_hidden: bool,
     ) -> ClientShellLayout {
         if cols <= self.mobile_width_threshold {
             let header_height = rows.min(2);
@@ -423,7 +424,9 @@ impl ClientShellConfig {
             };
         }
 
-        let sidebar_width = if sidebar_collapsed {
+        let sidebar_width = if sidebar_hidden {
+            0
+        } else if sidebar_collapsed {
             match self.sidebar_collapsed_mode {
                 SidebarCollapsedModeConfig::Compact => 4,
                 SidebarCollapsedModeConfig::Hidden => 0,
@@ -482,8 +485,10 @@ impl ClientShellConfig {
             .sidebar_width
             .unwrap_or(self.sidebar_width)
             .clamp(min_width, max_width);
+        // Pre-attach estimate: a vcer session starts as a lone master pane,
+        // which renders without a sidebar.
         let surface = self
-            .layout(cols, rows, sidebar_collapsed, 0, sidebar_width)
+            .layout(cols, rows, sidebar_collapsed, 0, sidebar_width, true)
             .pane_surface;
         ClientSurfaceSize {
             cols: surface.width.max(1),

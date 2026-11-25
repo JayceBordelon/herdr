@@ -656,6 +656,8 @@ impl Workspace {
     }
 
     // Workspace split routing carries pane identity, geometry, host context, and focus policy.
+    // Unused in vcer, which opens pane.split requests as tabs. Kept for upstream merges.
+    #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
     pub fn split_pane(
         &mut self,

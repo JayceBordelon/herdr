@@ -67,6 +67,31 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
     }
 }
 
+/// Adds a fanned-out background tab and pane. A lone master session renders
+/// without a sidebar, so tests that exercise sidebar chrome start from this.
+pub(super) fn fan_out(snapshot: &mut ClientShellSnapshot) {
+    snapshot.tabs.push(ClientShellTab {
+        tab_id: "tab_fan".into(),
+        workspace_id: "ws_1".into(),
+        number: snapshot.tabs.len() + 1,
+        label: "fan".into(),
+        custom_label: false,
+        zoomed: false,
+        focused: false,
+        agent_status: AgentStatus::Idle,
+    });
+    snapshot.panes.push(ClientShellPane {
+        pane_id: "pane_fan".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_fan".into(),
+        label: None,
+        cwd: None,
+        foreground_cwd: None,
+        focused: false,
+        right_click_passthrough: false,
+    });
+}
+
 fn worktree_list_result(open_workspace_id: Option<&str>) -> crate::api::schema::ResponseResult {
     crate::api::schema::ResponseResult::WorktreeList {
         source: crate::api::schema::WorktreeSourceInfo {
@@ -89,7 +114,7 @@ fn worktree_list_result(open_workspace_id: Option<&str>) -> crate::api::schema::
     }
 }
 
-fn surface() -> PaneSurfaceFrame {
+pub(super) fn surface() -> PaneSurfaceFrame {
     let surface_buffer = Buffer::with_lines(["LIVE", "PANE"]);
     PaneSurfaceFrame {
         boot_id: "boot-1".into(),

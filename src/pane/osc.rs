@@ -568,13 +568,18 @@ fn parse_agent_osc_body(body: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((&body[..sep], &body[sep + 1..]))
 }
 
+/// Tabs and line breaks separate words, so they become spaces instead of
+/// gluing the words together. Other control characters are dropped.
 fn sanitize_agent_osc_string(payload: &[u8], max_chars: usize) -> String {
     let text = String::from_utf8_lossy(payload);
-    let mut out = String::new();
-    for ch in text.chars().filter(|ch| !ch.is_control()).take(max_chars) {
-        out.push(ch);
-    }
-    out
+    text.chars()
+        .filter_map(|ch| match ch {
+            '\t' | '\n' | '\r' => Some(' '),
+            ch if ch.is_control() => None,
+            ch => Some(ch),
+        })
+        .take(max_chars)
+        .collect()
 }
 
 /// Reconstructs selected OSC sequences for local evidence capture while

@@ -31,6 +31,11 @@ use super::super::api_helpers::{METADATA_SOURCE_MAX_CHARS, METADATA_TTL_MAX_MS};
 use super::responses::{encode_error, encode_success};
 
 impl App {
+    /// vcer keeps every pane alone in its own tab: the view is always one
+    /// full-size pane, and fanned-out agents live in background tabs tracked
+    /// by the agents panel. A split request therefore opens the new pane as
+    /// a tab in the target's workspace. Callers still get the pane_info
+    /// response pane.split has always returned, so agent scripts keep working.
     pub(super) fn handle_pane_split(&mut self, id: String, params: PaneSplitParams) -> String {
         let target = if let Some(target_pane_id) = params.target_pane_id.as_deref() {
             self.parse_pane_id(target_pane_id)
@@ -52,91 +57,59 @@ impl App {
             Ok(env) => env,
             Err((code, message)) => return encode_error(id, &code, message),
         };
-        let direction = match params.direction {
-            crate::api::schema::SplitDirection::Right => ratatui::layout::Direction::Horizontal,
-            crate::api::schema::SplitDirection::Down => ratatui::layout::Direction::Vertical,
-        };
-        let (rows, cols) = self
-            .state
-            .new_pane_size(crate::ui::NewPanePlacement::Split {
-                ws_idx,
-                target: target_pane_id,
-                direction,
-                ratio: params.ratio.unwrap_or(0.5),
-            });
-        let split_cwd = params.cwd.map(std::path::PathBuf::from).or_else(|| {
+        // direction and ratio describe a tiling layout vcer no longer has.
+        let _ = (params.direction, params.ratio);
+        let (rows, cols) = self.state.new_pane_size(crate::ui::NewPanePlacement::Alone);
+        let cwd = params.cwd.map(std::path::PathBuf::from).unwrap_or_else(|| {
             let follow_cwd = self.launch_cwd_for_pane_in_workspace(ws_idx, target_pane_id);
-            Some(self.resolve_new_terminal_cwd(follow_cwd))
+            self.resolve_new_terminal_cwd(follow_cwd)
         });
         let default_shell = self.state.default_shell.clone();
         let scrollback_limit_bytes = self.state.pane_scrollback_limit_bytes;
         let host_terminal_theme = self.state.host_terminal_theme;
         let host_terminal_appearance = self.pane_host_terminal_appearance();
         let previous_focus = self.state.current_pane_focus_target();
-        let Some(ws) = self.state.workspaces.get_mut(ws_idx) else {
-            return encode_error(id, "pane_not_found", "pane not found");
-        };
         let shell_config = crate::pane::PaneShellConfig::new(&default_shell, self.state.shell_mode);
-        let split_result = match params.ratio {
-            Some(ratio) => ws.split_pane_with_ratio(
-                target_pane_id,
-                direction,
-                ratio,
-                rows,
-                cols,
-                split_cwd,
-                scrollback_limit_bytes,
-                host_terminal_theme,
-                host_terminal_appearance,
-                shell_config,
-                extra_env,
-                params.focus,
-            ),
-            None => ws.split_pane(
-                target_pane_id,
-                direction,
-                rows,
-                cols,
-                split_cwd,
-                scrollback_limit_bytes,
-                host_terminal_theme,
-                host_terminal_appearance,
-                shell_config,
-                extra_env,
-                params.focus,
-            ),
+        let result = self
+            .state
+            .workspaces
+            .get_mut(ws_idx)
+            .ok_or_else(|| std::io::Error::other("workspace disappeared"))
+            .and_then(|ws| {
+                ws.create_tab(
+                    rows,
+                    cols,
+                    cwd,
+                    scrollback_limit_bytes,
+                    host_terminal_theme,
+                    host_terminal_appearance,
+                    shell_config,
+                    extra_env,
+                )
+            });
+        let (tab_idx, terminal, runtime) = match result {
+            Ok(created) => created,
+            Err(err) => return encode_error(id, "pane_split_failed", err.to_string()),
         };
-        let (target_tab_idx, new_pane) = match split_result {
-            Some(Ok(result)) => result,
-            Some(Err(err)) => return encode_error(id, "pane_split_failed", err.to_string()),
-            None => return encode_error(id, "pane_not_found", "pane not found"),
-        };
-        if let Some(pane) = self.state.workspaces[ws_idx].pane_state_mut(new_pane.pane_id) {
+        self.terminal_runtimes.insert(terminal.id.clone(), runtime);
+        self.state.terminals.insert(terminal.id.clone(), terminal);
+        let new_pane_id = self.state.workspaces[ws_idx].tabs[tab_idx].root_pane;
+        self.state.remove_alias_shadowed_by_new_pane(new_pane_id);
+        if let Some(pane) = self.state.workspaces[ws_idx].pane_state_mut(new_pane_id) {
             pane.right_click_passthrough = matches!(
                 params.right_click,
                 crate::api::schema::PaneRightClickTarget::Pane
             );
         }
         if params.focus {
-            self.state.switch_workspace_tab(ws_idx, target_tab_idx);
+            self.state.switch_workspace_tab(ws_idx, tab_idx);
             self.state
-                .record_pane_focus_change(previous_focus, ws_idx, new_pane.pane_id);
+                .record_pane_focus_change(previous_focus, ws_idx, new_pane_id);
             self.state.mode = crate::app::Mode::Terminal;
         }
-        self.terminal_runtimes
-            .insert(new_pane.terminal.id.clone(), new_pane.runtime);
-        self.state
-            .remove_alias_shadowed_by_new_pane(new_pane.pane_id);
-        self.state
-            .terminals
-            .insert(new_pane.terminal.id.clone(), new_pane.terminal);
         self.schedule_session_save();
-        let pane = self.pane_info(ws_idx, new_pane.pane_id).unwrap();
-        self.emit_event(EventEnvelope {
-            event: EventKind::PaneCreated,
-            data: EventData::PaneCreated { pane: pane.clone() },
-        });
-        self.emit_layout_updated_event(ws_idx, target_tab_idx);
+        self.emit_tab_created_events(ws_idx, tab_idx);
+        let pane = self.pane_info(ws_idx, new_pane_id).unwrap();
 
         encode_success(id, ResponseResult::PaneInfo { pane })
     }

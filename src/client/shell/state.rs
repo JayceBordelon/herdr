@@ -291,6 +291,7 @@ pub(super) enum ClientShellOverlayKind {
     ContextMenu,
     GlobalMenu,
     Settings,
+    Peek,
 }
 
 #[derive(Debug)]
@@ -595,6 +596,7 @@ pub(super) enum ClientShellOverlay {
     ContextMenu(ClientContextMenuOverlay),
     GlobalMenu(ClientGlobalMenuOverlay),
     Settings(ClientSettingsOverlay),
+    Peek(super::peek::ClientPeekOverlay),
 }
 
 impl ClientShellOverlay {
@@ -613,6 +615,7 @@ impl ClientShellOverlay {
             Self::ContextMenu(_) => ClientShellOverlayKind::ContextMenu,
             Self::GlobalMenu(_) => ClientShellOverlayKind::GlobalMenu,
             Self::Settings(_) => ClientShellOverlayKind::Settings,
+            Self::Peek(_) => ClientShellOverlayKind::Peek,
         }
     }
 }
@@ -655,6 +658,9 @@ pub(super) enum PendingEndpointKind {
     },
     PaneLinkResolve {
         target: super::link_hover::LinkHoverTarget,
+    },
+    PeekRead {
+        pane_id: String,
     },
     PaneLinkActivate {
         pane_id: String,
@@ -1226,7 +1232,21 @@ impl ClientShellState {
             self.sidebar_collapsed,
             self.focused_tab_count(),
             self.sidebar_width,
+            self.single_session(),
         )
+    }
+
+    /// One local workspace running one pane is just the master: the whole
+    /// screen belongs to it and the sidebar appears once anything fans out.
+    /// Before the first snapshot the session is presumed to be a lone master,
+    /// which keeps the pre-attach surface estimate honest.
+    fn single_session(&self) -> bool {
+        self.endpoints.len() <= 1
+            && self.snapshot.as_deref().is_none_or(|snapshot| {
+                snapshot.workspaces.len() == 1
+                    && snapshot.tabs.len() == 1
+                    && snapshot.panes.len() == 1
+            })
     }
 
     pub(crate) fn surface_size(&self, cols: u16, rows: u16) -> ClientSurfaceSize {

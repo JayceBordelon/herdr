@@ -495,6 +495,15 @@ fn selecting_a_reconnecting_machine_retries_it() {
 
 fn state_with_scrollable_agents() -> (ClientShellState, ClientEndpointId) {
     let (mut state, remote) = state_with_remote();
+    // Two lines per agent keep eight agents overflowing the panel, which the
+    // scroll tests below rely on. The default row is a single line.
+    state.config.agents.rows = vec![
+        vec![
+            crate::config::AgentSidebarToken::StateIcon,
+            crate::config::AgentSidebarToken::Workspace,
+        ],
+        vec![crate::config::AgentSidebarToken::Agent],
+    ];
     for endpoint_id in [ClientEndpointId::Local, remote.clone()] {
         let mut projection = state
             .endpoints

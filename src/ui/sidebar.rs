@@ -48,7 +48,7 @@ fn sidebar_section_heights(total_height: u16, split_ratio: f32) -> (u16, u16) {
 }
 
 /// The panel sits on the right, so its first column is the divider.
-fn sidebar_content(area: Rect) -> Rect {
+pub(crate) fn sidebar_content(area: Rect) -> Rect {
     Rect::new(
         area.x.saturating_add(u16::from(area.width > 0)),
         area.y,

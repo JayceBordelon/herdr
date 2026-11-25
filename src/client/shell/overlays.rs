@@ -79,6 +79,7 @@ pub(crate) fn render_client_overlay(
         ClientShellOverlay::WorktreeRemove(v) => {
             worktree_overlays::render_worktree_remove_overlay(b, v, p)
         }
+        ClientShellOverlay::Peek(v) => super::super::peek::render_peek_overlay(b, v, s, p),
         ClientShellOverlay::ContextMenu(_) | ClientShellOverlay::GlobalMenu(_) => None,
     }
 }
@@ -218,7 +219,7 @@ pub(crate) fn render_context_menu(
     })
 }
 
-fn panel(
+pub(crate) fn panel(
     b: &mut Buffer,
     a: Rect,
     c: ratatui::style::Color,

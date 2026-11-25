@@ -22,6 +22,25 @@ holds the fork constants.
 
 Tracing targets follow the bin name, so log filters use `vcer=`, not `herdr=`.
 
+## UI model
+
+One master pane, subagents fan out. `pane.split` opens the new pane as its
+own tab (the view is never tiled). The master is the pane in the first tab of
+the first workspace. The sidebar is hidden while a session is one lone pane
+and lists agents one per line: icon, then "master" or the agent's task title.
+Peek (`prefix+space`, `src/client/shell/peek.rs`) tiles every subagent over a
+blanked master by polling `pane.read`. The client only streams the focused
+pane, so any per-subagent view must poll like this.
+
+Untrusted text (titles, pane screens) goes through `ui::sanitize_line` before
+it is drawn. Peek's layout test renders a matrix of sizes, counts and text
+shapes. Extend it rather than adding one-off cases.
+
+Making an API method callable from the TUI means flipping its client_shell
+column in `src/api/schema.rs` and freezing its shape digest in
+`advertised_client_shell_method_shapes_stay_at_the_v1_contract`. Never
+rewrite the published fixture.
+
 ## macOS launchd
 
 macOS 26.5 loads a `launchctl bootstrap` job but no longer starts it, even

@@ -439,16 +439,13 @@ impl AgentsSidebarConfig {
 
 impl Default for AgentsSidebarConfig {
     fn default() -> Self {
+        // One line per agent: its icon, then "master" or what it is working on.
         Self {
-            rows: vec![
-                vec![
-                    AgentSidebarToken::StateIcon,
-                    AgentSidebarToken::Machine,
-                    AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
-                ],
-                vec![AgentSidebarToken::Agent],
-            ],
+            rows: vec![vec![
+                AgentSidebarToken::StateIcon,
+                AgentSidebarToken::Machine,
+                AgentSidebarToken::Workspace,
+            ]],
             rows_by_agent: BTreeMap::new(),
             row_gap: DEFAULT_SIDEBAR_ROW_GAP,
         }
@@ -491,15 +488,11 @@ mod tests {
         let config = SidebarConfig::default();
         assert_eq!(
             config.agents.rows,
-            vec![
-                vec![
-                    AgentSidebarToken::StateIcon,
-                    AgentSidebarToken::Machine,
-                    AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
-                ],
-                vec![AgentSidebarToken::Agent],
-            ]
+            vec![vec![
+                AgentSidebarToken::StateIcon,
+                AgentSidebarToken::Machine,
+                AgentSidebarToken::Workspace,
+            ]]
         );
         assert!(config.agents.rows_by_agent.is_empty());
         assert_eq!(config.agents.row_gap, 0);

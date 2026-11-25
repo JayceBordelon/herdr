@@ -2824,10 +2824,19 @@ mod tests {
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
 
         assert_eq!(response["result"]["type"], "pane_info");
-        assert_eq!(response["result"]["pane"]["tab_id"], target_tab_id);
+        let new_tab_id = response["result"]["pane"]["tab_id"].as_str().unwrap();
+        assert_ne!(new_tab_id, target_tab_id, "the pane opens in its own tab");
         assert_eq!(response["result"]["pane"]["focused"], true);
         assert_eq!(app.state.active, Some(0));
-        assert_eq!(app.state.workspaces[0].active_tab, background_tab);
+        let active_tab = app.state.workspaces[0].active_tab;
+        assert_eq!(
+            app.public_tab_id(0, active_tab).as_deref(),
+            Some(new_tab_id)
+        );
+        assert_eq!(
+            app.state.workspaces[0].tabs[active_tab].layout.pane_count(),
+            1
+        );
 
         let runtimes: Vec<_> = app.terminal_runtimes.drain().collect();
         for (_terminal_id, runtime) in runtimes {
@@ -2840,7 +2849,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pane_split_request_applies_ratio() {
+    async fn pane_split_request_opens_the_new_pane_in_its_own_tab() {
         let _guard = config_env_lock().lock().unwrap();
         let original_shell = std::env::var_os("SHELL");
         std::env::set_var("SHELL", exiting_test_command());
@@ -2874,8 +2883,8 @@ mod tests {
         let splits = app.state.workspaces[0].tabs[0]
             .layout
             .splits(ratatui::layout::Rect::new(0, 0, 100, 20));
-        assert_eq!(splits.len(), 1);
-        assert!((splits[0].ratio - 0.333).abs() < f32::EPSILON);
+        assert!(splits.is_empty(), "the target tab keeps its single pane");
+        assert_eq!(app.state.workspaces[0].tabs.len(), 2);
         let response_pane_id = response["result"]["pane"]["pane_id"].as_str().unwrap();
         let (_, response_pane_id) = app.parse_pane_id(response_pane_id).unwrap();
         assert!(
@@ -3003,7 +3012,9 @@ mod tests {
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
 
         assert_eq!(response["result"]["type"], "pane_info");
-        assert_eq!(app.state.workspaces[0].tabs[0].layout.pane_count(), 2);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 2);
+        assert_eq!(app.state.workspaces[0].tabs[0].layout.pane_count(), 1);
+        assert_eq!(app.state.workspaces[0].active_tab, 0);
         assert_eq!(
             app.state.workspaces[0].tabs[0].layout.focused(),
             target_pane

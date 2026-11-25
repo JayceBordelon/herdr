@@ -53,7 +53,9 @@ fn mouse_hits_use_stable_workspace_tab_and_pane_ids() {
 fn collapsed_workspace_jitter_remains_a_click() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.sidebar_collapsed = true;
-    state.set_snapshot(Box::new(snapshot()));
+    let mut projected = snapshot();
+    super::fan_out(&mut projected);
+    state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     state.compose(106, 20).expect("collapsed sidebar");
     let workspace = state.hits.workspaces[0].rect;
@@ -749,7 +751,7 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
         crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_2"
     ));
 
-    state.compose(106, 10).expect("short agent sidebar frame");
+    state.compose(106, 6).expect("short agent sidebar frame");
     assert_eq!(
         state
             .hits
@@ -765,9 +767,7 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
         row: body.y,
         modifiers: KeyModifiers::empty(),
     })]);
-    state
-        .compose(106, 10)
-        .expect("scrolled agent sidebar frame");
+    state.compose(106, 6).expect("scrolled agent sidebar frame");
     assert_eq!(
         state
             .hits
@@ -794,6 +794,7 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
 #[test]
 fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
     let mut projected = snapshot();
+    super::fan_out(&mut projected);
     projected.tabs[0].label = "second".into();
     projected.tabs[0].custom_label = true;
     projected.agents = vec![ClientShellAgent {
@@ -812,7 +813,18 @@ fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
         tokens: Vec::new(),
         focused: true,
     }];
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    // The default row is icon plus headline. Configure tab and agent tokens
+    // so every styled cell kind is on screen.
+    let mut config = Config::default();
+    config.ui.sidebar.agents.rows = vec![
+        vec![
+            crate::config::AgentSidebarToken::StateIcon,
+            crate::config::AgentSidebarToken::Workspace,
+            crate::config::AgentSidebarToken::Tab,
+        ],
+        vec![crate::config::AgentSidebarToken::Agent],
+    ];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("agent sidebar frame");
@@ -969,6 +981,7 @@ fn agent_sort_toggle_is_client_local_and_persists_per_endpoint() {
             .as_nanos()
     ));
     let mut projected = snapshot();
+    super::fan_out(&mut projected);
     projected.agents.push(ClientShellAgent {
         pane_id: "pane_1".into(),
         workspace_id: "ws_1".into(),

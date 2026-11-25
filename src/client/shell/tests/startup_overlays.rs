@@ -663,6 +663,7 @@ fn live_client_config_keeps_sound_diagnostics() {
 fn update_ready_menu_opens_client_owned_release_notes_and_dismisses_by_version() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let mut endpoint_snapshot = snapshot();
+    super::fan_out(&mut endpoint_snapshot);
     endpoint_snapshot.update_available = Some("0.8.3".into());
     endpoint_snapshot.latest_release_notes_available = true;
     endpoint_snapshot.release_notes = Some(crate::protocol::ClientShellReleaseNotes {
@@ -1040,6 +1041,7 @@ fn coalesced_release_notes_open_and_mouse_uses_current_geometry() {
 fn outdated_integration_badges_launcher_settings_and_settings_tab() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let mut endpoint_snapshot = snapshot();
+    super::fan_out(&mut endpoint_snapshot);
     endpoint_snapshot.integration_updates_available = true;
     state.set_snapshot(Box::new(endpoint_snapshot));
     state.set_pane_surface(surface());
@@ -1092,6 +1094,7 @@ fn outdated_integration_badges_launcher_settings_and_settings_tab() {
 fn combined_update_and_integration_attention_preserves_both_badges() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let mut endpoint_snapshot = snapshot();
+    super::fan_out(&mut endpoint_snapshot);
     endpoint_snapshot.update_available = Some("0.8.3".into());
     endpoint_snapshot.latest_release_notes_available = true;
     endpoint_snapshot.integration_updates_available = true;
@@ -1131,6 +1134,7 @@ fn combined_update_and_integration_attention_preserves_both_badges() {
 fn current_release_notes_use_whats_new_without_attention_badge() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let mut endpoint_snapshot = snapshot();
+    super::fan_out(&mut endpoint_snapshot);
     endpoint_snapshot.latest_release_notes_available = true;
     endpoint_snapshot.release_notes = Some(crate::protocol::ClientShellReleaseNotes {
         version: "0.8.2".into(),

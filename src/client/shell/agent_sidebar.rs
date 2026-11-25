@@ -14,7 +14,59 @@ pub(super) struct AgentRow {
     pub(super) pane_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
+    /// Drawn in the status icon slot, in the status color, for known agents.
+    pub(super) icon: Option<&'static str>,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
+}
+
+pub(super) fn agent_icon(agent: &crate::protocol::ClientShellAgent) -> Option<&'static str> {
+    match agent.agent.as_deref()? {
+        "claude" => Some("✳"),
+        "codex" => Some("⬢"),
+        _ => None,
+    }
+}
+
+/// The main session is the pane in the first tab of the first workspace.
+pub(super) fn master_pane_id(snapshot: &ClientShellSnapshot) -> Option<&str> {
+    let workspace = snapshot.workspaces.iter().min_by_key(|ws| ws.number)?;
+    let tab = snapshot
+        .tabs
+        .iter()
+        .filter(|tab| tab.workspace_id == workspace.workspace_id)
+        .min_by_key(|tab| tab.number)?;
+    snapshot
+        .panes
+        .iter()
+        .find(|pane| pane.tab_id == tab.tab_id)
+        .map(|pane| pane.pane_id.as_str())
+}
+
+/// "master" for the main session, otherwise the task the agent reports in
+/// its title. Titles that only name the agent say nothing about the task.
+pub(super) fn agent_headline(
+    snapshot: &ClientShellSnapshot,
+    agent: &crate::protocol::ClientShellAgent,
+) -> String {
+    if master_pane_id(snapshot) == Some(agent.pane_id.as_str()) {
+        return "master".into();
+    }
+    let names_only_the_agent = |title: &str| {
+        let title = title.trim().to_ascii_lowercase();
+        title.is_empty()
+            || agent.agent.as_deref().is_some_and(|name| title == name)
+            || matches!(title.as_str(), "claude code" | "codex")
+    };
+    [
+        agent.title.as_deref(),
+        agent.terminal_title_stripped.as_deref(),
+        agent.terminal_title.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|title| crate::ui::sanitize_line(title).trim().to_owned())
+    .find(|title| !names_only_the_agent(title))
+    .unwrap_or_else(|| "subagent".into())
 }
 
 pub(super) fn ordered_agent_pane_ids(
@@ -256,7 +308,8 @@ pub(super) fn agent_row(
         .agents
         .iter()
         .find(|agent| agent.pane_id == pane_id)?;
-    let workspace = snapshot
+    // Agents whose workspace has not reached this snapshot yet stay hidden.
+    snapshot
         .workspaces
         .iter()
         .find(|workspace| workspace.workspace_id == agent.workspace_id)?;
@@ -293,11 +346,14 @@ pub(super) fn agent_row(
         .agent
         .as_deref()
         .and_then(crate::detect::parse_agent_label);
+    // vcer has one workspace per session, so the workspace slot carries the
+    // agent's headline instead of repeating the same workspace name.
+    let headline = agent_headline(snapshot, agent);
     let rows = crate::ui::sidebar_agent_rows(
         &config.agents,
         crate::ui::AgentTokenContext {
             machine,
-            workspace: &workspace.label,
+            workspace: &headline,
             tab: tab_label,
             pane: agent
                 .title
@@ -315,6 +371,7 @@ pub(super) fn agent_row(
         pane_id: agent.pane_id.clone(),
         status: agent.agent_status,
         focused: agent.focused,
+        icon: agent_icon(agent),
         rows,
     })
 }
@@ -343,7 +400,8 @@ pub(super) fn render_agent_row(
     let status_style = Style::default().fg(status_color(row.status, palette));
     let secondary = Style::default().fg(palette.overlay0);
     let icon = (
-        status_icon(row.status, config.status_indicators),
+        row.icon
+            .unwrap_or_else(|| status_icon(row.status, config.status_indicators)),
         Style::default().fg(status_color(row.status, palette)),
     );
     let rows = if row.rows.is_empty() {
@@ -380,107 +438,6 @@ pub(super) fn render_agent_row(
 }
 
 /// Lists recent pane-to-pane messages, newest first, two rows each.
-pub(super) fn render_peer_message_feed(
-    buffer: &mut Buffer,
-    area: Rect,
-    messages: &[crate::protocol::ClientShellPeerMessage],
-    agents: &[crate::protocol::ClientShellAgent],
-    config: &ClientShellConfig,
-) {
-    if area.height == 0 || area.width == 0 {
-        return;
-    }
-    let palette = &config.palette;
-    let width = usize::from(area.width);
-    buffer.set_stringn(
-        area.x,
-        area.y,
-        "─".repeat(width),
-        width,
-        Style::default().fg(palette.surface_dim),
-    );
-    if area.height < 2 {
-        return;
-    }
-    buffer.set_stringn(
-        area.x,
-        area.y + 1,
-        " messages",
-        width,
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-    let body_y = area.y + 2;
-    let body_rows = area.bottom().saturating_sub(body_y);
-    if messages.is_empty() {
-        if body_rows > 0 {
-            buffer.set_stringn(
-                area.x,
-                body_y,
-                " no messages yet",
-                width,
-                Style::default()
-                    .fg(palette.overlay0)
-                    .add_modifier(Modifier::DIM),
-            );
-        }
-        return;
-    }
-    let inner_width = width.saturating_sub(1);
-    for (index, message) in messages.iter().take(usize::from(body_rows / 2)).enumerate() {
-        let y = body_y + (index as u16) * 2;
-        let route = peer_message_route(message, agents);
-        buffer.set_stringn(
-            area.x + 1,
-            y,
-            crate::ui::truncate_end(&route, inner_width),
-            inner_width,
-            Style::default()
-                .fg(palette.accent)
-                .add_modifier(Modifier::BOLD),
-        );
-        buffer.set_stringn(
-            area.x + 1,
-            y + 1,
-            crate::ui::truncate_end(&message.preview, inner_width),
-            inner_width,
-            Style::default().fg(palette.subtext0),
-        );
-    }
-}
-
-/// Names both ends by agent, adding pane ids when the names alone are ambiguous.
-fn peer_message_route(
-    message: &crate::protocol::ClientShellPeerMessage,
-    agents: &[crate::protocol::ClientShellAgent],
-) -> String {
-    let name = |pane_id: &str, fallback: &str| {
-        agents
-            .iter()
-            .find(|agent| agent.pane_id == pane_id)
-            .and_then(|agent| {
-                agent
-                    .display_agent
-                    .as_deref()
-                    .or(agent.name.as_deref())
-                    .or(agent.agent.as_deref())
-            })
-            .unwrap_or(fallback)
-            .to_owned()
-    };
-    let from = name(&message.from_pane_id, &message.from_label);
-    let to = name(&message.to_pane_id, &message.to_label);
-    if from == to {
-        format!(
-            "{from} {} → {to} {}",
-            message.from_pane_id, message.to_pane_id
-        )
-    } else {
-        format!("{from} → {to}")
-    }
-}
-
 fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
     for (offset, character) in text.chars().take(width as usize).enumerate() {
         if let Some(cell) = buffer.cell_mut((x + offset as u16, y)) {
