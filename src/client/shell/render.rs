@@ -245,6 +245,7 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) reveal_focused_workspace: &'a mut bool,
     pub(super) reveal_focused_tab: &'a mut bool,
     pub(super) sidebar_collapsed: bool,
+    pub(super) board: bool,
     pub(super) sidebar_section_split: f32,
     pub(super) tab_drag_insert_index: Option<usize>,
     pub(super) selected_workspace_id: Option<&'a WorkspaceNavigationTarget>,
@@ -310,7 +311,15 @@ pub(super) fn render_shell(
             );
         }
     }
-    if layout.tab_bar.height > 0 {
+    if layout.tab_bar.height > 0 && state.board {
+        super::board::render_zoom_header(
+            buffer,
+            layout.tab_bar,
+            snapshot,
+            &config.palette,
+            &mut hits,
+        );
+    } else if layout.tab_bar.height > 0 {
         render_tab_bar(
             buffer,
             layout.tab_bar,

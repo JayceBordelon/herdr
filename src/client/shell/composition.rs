@@ -67,6 +67,7 @@ impl ClientShellState {
             reveal_focused_workspace: &mut self.reveal_focused_workspace,
             reveal_focused_tab: &mut self.reveal_focused_tab,
             sidebar_collapsed: false,
+            board: self.board,
             sidebar_section_split: self.sidebar_section_split,
             tab_drag_insert_index: None,
             selected_workspace_id: self
@@ -211,6 +212,7 @@ impl ClientShellState {
                 reveal_focused_workspace: &mut self.reveal_focused_workspace,
                 reveal_focused_tab: &mut self.reveal_focused_tab,
                 sidebar_collapsed: self.sidebar_collapsed,
+                board: self.board,
                 sidebar_section_split: self.sidebar_section_split,
                 tab_drag_insert_index,
                 selected_workspace_id: self
@@ -664,6 +666,7 @@ impl ClientShellState {
                 self.hits.navigator_popup = rendered.navigator_popup;
                 self.hits.navigator_search = rendered.navigator_search;
                 self.hits.navigator_rows = rendered.navigator_rows;
+                self.hits.board_boxes = rendered.board_boxes;
                 self.hits.navigator_scrollbar = rendered.navigator_scrollbar;
                 self.hits.navigator_scroll_metrics = rendered.navigator_scroll_metrics;
                 self.hits.worktree_search = rendered.worktree_search;

@@ -694,6 +694,18 @@ impl ClientShellState {
             self.navigate_workspace_id = None;
             outcome.repaint = true;
         }
+        if matches!(self.overlay, Some(ClientShellOverlay::Board(_))) {
+            self.handle_board_mouse(mouse, outcome);
+            return;
+        }
+        if self.board
+            && self.overlay.is_none()
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+            && super::contains(self.hits.board_return, point)
+        {
+            self.open_board(outcome);
+            return;
+        }
         if matches!(self.overlay, Some(ClientShellOverlay::Onboarding)) {
             if mouse.kind == MouseEventKind::Down(MouseButton::Left)
                 && super::contains(self.hits.overlay_primary, point)
@@ -2043,7 +2055,7 @@ impl ClientShellState {
                     return;
                 }
                 if super::contains(self.hits.peek_button, point) {
-                    self.open_peek_overlay(outcome);
+                    self.open_board(outcome);
                     return;
                 }
                 if super::contains(self.hits.global_launcher, point) {

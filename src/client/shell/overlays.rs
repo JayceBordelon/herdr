@@ -30,6 +30,7 @@ pub(crate) struct OverlayRender {
     pub(crate) release_notes_scrollbar: Rect,
     pub(crate) release_notes_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(crate) release_notes_max_scroll: usize,
+    pub(crate) board_boxes: Vec<(Rect, usize)>,
     pub(crate) cursor: Option<crate::protocol::CursorState>,
 }
 
@@ -79,7 +80,7 @@ pub(crate) fn render_client_overlay(
         ClientShellOverlay::WorktreeRemove(v) => {
             worktree_overlays::render_worktree_remove_overlay(b, v, p)
         }
-        ClientShellOverlay::Peek(v) => super::super::peek::render_peek_overlay(b, v, s, p),
+        ClientShellOverlay::Board(v) => super::super::board::render_board(b, v, s, p),
         ClientShellOverlay::ContextMenu(_) | ClientShellOverlay::GlobalMenu(_) => None,
     }
 }

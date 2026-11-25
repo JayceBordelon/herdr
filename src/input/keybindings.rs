@@ -70,7 +70,7 @@ pub(crate) enum KeybindAction {
     OpenNotificationTarget,
     Detach,
     OpenNavigator,
-    Peek,
+    Board,
 }
 
 pub(crate) fn resolve_direct_binding(
@@ -155,7 +155,7 @@ pub(crate) fn resolve_non_indexed_action(
         ),
         (&keybinds.detach, KeybindAction::Detach),
         (&keybinds.goto, KeybindAction::OpenNavigator),
-        (&keybinds.peek, KeybindAction::Peek),
+        (&keybinds.board, KeybindAction::Board),
     ] {
         if action_matches(bindings, key, dispatch) {
             return Some(action);

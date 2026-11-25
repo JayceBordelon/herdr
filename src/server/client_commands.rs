@@ -254,10 +254,19 @@ mod tests {
             actual.remove("pane.link.resolve").as_deref(),
             Some("f5e4a3e01453ae7b188f127ce951c12c20e0bebcc17cc364eeb6d1a01fd5bf81")
         );
-        // vcer peek tiles poll subagent screens through pane.read.
+        // vcer board boxes poll pane screens through pane.read, and its input
+        // line messages agents with agent.prompt and shells with pane.send_text.
         assert_eq!(
             actual.remove("pane.read").as_deref(),
             Some("85dbb95417f7b04684f24c8fa9dbfa5c7a218c9829bcace71dce17ec03044960")
+        );
+        assert_eq!(
+            actual.remove("agent.prompt").as_deref(),
+            Some("0cb08afb7f2e5317370d8c8a6664a2109116532e21d29e94da8e92b86fd200f4")
+        );
+        assert_eq!(
+            actual.remove("pane.send_text").as_deref(),
+            Some("c9a75f3d4510e4bcc288e832458a60ff67ce7d82a18dda83bdc8f565f2bd32c9")
         );
 
         assert_eq!(

@@ -413,6 +413,7 @@ impl ClientShellConfig {
         tab_count: usize,
         sidebar_width: u16,
         sidebar_hidden: bool,
+        board: bool,
     ) -> ClientShellLayout {
         if cols <= self.mobile_width_threshold {
             let header_height = rows.min(2);
@@ -424,7 +425,7 @@ impl ClientShellConfig {
             };
         }
 
-        let sidebar_width = if sidebar_hidden {
+        let sidebar_width = if sidebar_hidden || board {
             0
         } else if sidebar_collapsed {
             match self.sidebar_collapsed_mode {
@@ -441,7 +442,9 @@ impl ClientShellConfig {
         }
         .min(cols.saturating_sub(1));
         let main = Rect::new(0, 0, cols.saturating_sub(sidebar_width), rows);
-        let show_tab_bar = rows > 1 && !(self.hide_tab_bar_when_single_tab && tab_count == 1);
+        // On the board the tab bar row becomes the zoom header.
+        let show_tab_bar =
+            rows > 1 && (board || !(self.hide_tab_bar_when_single_tab && tab_count == 1));
         let tab_height = u16::from(show_tab_bar);
         let (tab_bar, pane_surface) = match self.tab_bar_position {
             TabBarPositionConfig::Top => (
@@ -488,7 +491,7 @@ impl ClientShellConfig {
         // Pre-attach estimate: a vcer session starts as a lone master pane,
         // which renders without a sidebar.
         let surface = self
-            .layout(cols, rows, sidebar_collapsed, 0, sidebar_width, true)
+            .layout(cols, rows, sidebar_collapsed, 0, sidebar_width, true, false)
             .pane_surface;
         ClientSurfaceSize {
             cols: surface.width.max(1),

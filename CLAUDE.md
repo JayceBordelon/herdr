@@ -26,11 +26,13 @@ Tracing targets follow the bin name, so log filters use `vcer=`, not `herdr=`.
 
 One master pane, subagents fan out. `pane.split` opens the new pane as its
 own tab (the view is never tiled). The master is the pane in the first tab of
-the first workspace. The sidebar is hidden while a session is one lone pane
-and lists agents one per line: icon, then "master" or the agent's task title.
-Peek (`prefix+space`, `src/client/shell/peek.rs`) tiles every subagent over a
-blanked master by polling `pane.read`. The client only streams the focused
-pane, so any per-subagent view must poll like this.
+the first workspace. The main screen is the board (`src/client/shell/board.rs`):
+every pane as a live box, master the biggest, and one input line that sends
+`agent.prompt` to agents or `pane.send_text` to shells. The board is an
+overlay the client entrypoint switches on (`ClientShellState::board`), so
+classic layout tests run without it. Zooming into a box shows the raw pane
+under a one row header. The client only streams the focused pane, so boxes
+poll `pane.read`.
 
 Agents running inside vcer learn this model from `skills/herdr/SKILL.md`
 (printed by `vcer --skill`, compiled into the binary). Update it whenever the
@@ -38,7 +40,7 @@ layout model or a keybind it names changes, or agents report intended
 behavior as bugs.
 
 Untrusted text (titles, pane screens) goes through `ui::sanitize_line` before
-it is drawn. Peek's layout test renders a matrix of sizes, counts and text
+it is drawn. The board's layout test renders a matrix of sizes, counts and text
 shapes. Extend it rather than adding one-off cases.
 
 Making an API method callable from the TUI means flipping its client_shell

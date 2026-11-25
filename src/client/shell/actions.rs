@@ -43,8 +43,14 @@ impl ClientShellState {
                     self.begin_worktree_action(action, outcome);
                     return;
                 }
-                if action == crate::input::KeybindAction::Peek {
-                    self.open_peek_overlay(outcome);
+                if action == crate::input::KeybindAction::Board {
+                    if matches!(self.overlay, Some(ClientShellOverlay::Board(_))) {
+                        self.overlay = None;
+                        self.board_zoomed = true;
+                        outcome.repaint = true;
+                        return;
+                    }
+                    self.open_board(outcome);
                     return;
                 }
                 if action == crate::input::KeybindAction::OpenNavigator {
@@ -520,8 +526,8 @@ impl ClientShellState {
         if let PendingEndpointKind::PaneLinkResolve { target } = pending.kind {
             return self.complete_link_hover(target, result);
         }
-        if let PendingEndpointKind::PeekRead { pane_id } = &pending.kind {
-            return (self.receive_peek_read(pane_id, result), Vec::new());
+        if let PendingEndpointKind::BoardRead { pane_id } = &pending.kind {
+            return (self.receive_board_read(pane_id, result), Vec::new());
         }
         if result.is_ok() {
             let timeout_key = ClientEndpointNoticeKey {

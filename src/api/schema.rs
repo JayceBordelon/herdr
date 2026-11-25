@@ -88,7 +88,7 @@ operations::define_operations! {
     AgentViewClear(AgentViewClearParams) => "agent.view.clear", true, false;
     AgentFocus(AgentTarget) => "agent.focus", true, false;
     AgentStart(AgentStartParams) => "agent.start", true, false;
-    AgentPrompt(AgentPromptParams) => "agent.prompt", true, false;
+    AgentPrompt(AgentPromptParams) => "agent.prompt", true, true;
     AgentWait(AgentWaitParams) => "agent.wait", false, false;
     PaneSplit(PaneSplitParams) => "pane.split", true, true;
     PaneSwap(PaneSwapParams) => "pane.swap", true, true;
@@ -117,7 +117,7 @@ operations::define_operations! {
     PaneLinkActivate(PaneLinkActivateParams) => "pane.link.activate", false, true;
     PaneLinkResolve(PaneLinkActivateParams) => "pane.link.resolve", false, true;
     PaneRename(PaneRenameParams) => "pane.rename", true, true;
-    PaneSendText(PaneSendTextParams) => "pane.send_text", false, false;
+    PaneSendText(PaneSendTextParams) => "pane.send_text", false, true;
     PaneSendKeys(PaneSendKeysParams) => "pane.send_keys", false, false;
     PaneSendInput(PaneSendInputParams) => "pane.send_input", false, false;
     PaneRead(PaneReadParams) => "pane.read", false, true;

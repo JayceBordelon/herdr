@@ -279,14 +279,14 @@ pub(crate) fn render_sidebar(
                 Style::default().fg(palette.overlay0),
             );
         }
-        // Peek is otherwise reachable only through prefix+space, which nothing
-        // on screen mentions. Centered between new and menu when it fits.
+        // The board is otherwise reachable only through prefix+space, which
+        // nothing on screen mentions. Centered between new and menu when it fits.
         let master = super::super::agent_sidebar::master_pane_id(snapshot);
         let has_subagents = snapshot
             .agents
             .iter()
             .any(|agent| Some(agent.pane_id.as_str()) != master);
-        const PEEK_LABEL: &str = "▦ peek";
+        const PEEK_LABEL: &str = "▦ board";
         let label_width = PEEK_LABEL.chars().count() as u16;
         let peek_x = content.x + content.width.saturating_sub(label_width) / 2;
         let fits = peek_x >= content.x + 6

@@ -113,6 +113,8 @@ pub(super) struct ShellHitMap {
     pub(super) mobile_max_scroll: usize,
     pub(super) global_launcher: Rect,
     pub(super) peek_button: Rect,
+    pub(super) board_boxes: Vec<(Rect, usize)>,
+    pub(super) board_return: Rect,
     pub(super) notification_toast: Rect,
     pub(super) global_menu_rows: Vec<(Rect, usize)>,
     pub(super) context_menu_rows: Vec<(Rect, usize)>,
@@ -292,7 +294,7 @@ pub(super) enum ClientShellOverlayKind {
     ContextMenu,
     GlobalMenu,
     Settings,
-    Peek,
+    Board,
 }
 
 #[derive(Debug)]
@@ -597,7 +599,7 @@ pub(super) enum ClientShellOverlay {
     ContextMenu(ClientContextMenuOverlay),
     GlobalMenu(ClientGlobalMenuOverlay),
     Settings(ClientSettingsOverlay),
-    Peek(super::peek::ClientPeekOverlay),
+    Board(super::board::ClientBoardOverlay),
 }
 
 impl ClientShellOverlay {
@@ -616,7 +618,7 @@ impl ClientShellOverlay {
             Self::ContextMenu(_) => ClientShellOverlayKind::ContextMenu,
             Self::GlobalMenu(_) => ClientShellOverlayKind::GlobalMenu,
             Self::Settings(_) => ClientShellOverlayKind::Settings,
-            Self::Peek(_) => ClientShellOverlayKind::Peek,
+            Self::Board(_) => ClientShellOverlayKind::Board,
         }
     }
 }
@@ -660,7 +662,7 @@ pub(super) enum PendingEndpointKind {
     PaneLinkResolve {
         target: super::link_hover::LinkHoverTarget,
     },
-    PeekRead {
+    BoardRead {
         pane_id: String,
     },
     PaneLinkActivate {
@@ -881,6 +883,12 @@ pub(crate) struct ClientShellState {
     pub(super) sidebar_collapsed_manual: bool,
     pub(super) sidebar_width: u16,
     pub(super) sidebar_width_manual: bool,
+    /// The agent board is vcer's main screen. Off by default so classic
+    /// layout code paths and their tests keep working, and switched on by
+    /// the client entrypoint.
+    pub(crate) board: bool,
+    /// The user zoomed into a pane, so the board stays closed until asked.
+    pub(super) board_zoomed: bool,
     pub(super) sidebar_section_split: f32,
     pub(super) sidebar_section_split_manual: bool,
     pub(super) agent_panel_sort_manual: bool,
@@ -1055,6 +1063,8 @@ impl ClientShellState {
             sidebar_collapsed_manual: preferences.sidebar_collapsed.is_some(),
             sidebar_width,
             sidebar_width_manual: preferences.sidebar_width.is_some(),
+            board: false,
+            board_zoomed: false,
             sidebar_section_split,
             sidebar_section_split_manual: preferences.sidebar_section_split.is_some(),
             agent_panel_sort_manual: preferences.agent_panel_sort.is_some(),
@@ -1234,6 +1244,7 @@ impl ClientShellState {
             self.focused_tab_count(),
             self.sidebar_width,
             self.single_session(),
+            self.board,
         )
     }
 
