@@ -7,7 +7,6 @@ fn queue_requests(server: &mut HeadlessServer, count: usize) -> std::sync::mpsc:
     for index in 0..count {
         sender
             .send(api::ApiRequestMessage {
-                sender_pane_id: None,
                 request: api::schema::Request {
                     id: index.to_string(),
                     method: api::schema::Method::WorkspaceList(api::schema::EmptyParams::default()),
@@ -114,7 +113,6 @@ async fn server_loop_drains_api_backlog_and_runs_scheduled_work() {
         };
         sender
             .send(api::ApiRequestMessage {
-                sender_pane_id: None,
                 request: api::schema::Request {
                     id: index.to_string(),
                     method,

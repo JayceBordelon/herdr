@@ -112,7 +112,6 @@ pub(super) struct ShellHitMap {
     pub(super) mobile_targets: Vec<(Rect, ClientMobileTarget)>,
     pub(super) mobile_max_scroll: usize,
     pub(super) global_launcher: Rect,
-    pub(super) peek_button: Rect,
     pub(super) board_boxes: Vec<(Rect, usize)>,
     pub(super) board_return: Rect,
     pub(super) notification_toast: Rect,
@@ -1243,22 +1242,8 @@ impl ClientShellState {
             self.sidebar_collapsed,
             self.focused_tab_count(),
             self.sidebar_width,
-            self.single_session(),
             self.board,
         )
-    }
-
-    /// One local workspace running one pane is just the master: the whole
-    /// screen belongs to it and the sidebar appears once anything fans out.
-    /// Before the first snapshot the session is presumed to be a lone master,
-    /// which keeps the pre-attach surface estimate honest.
-    fn single_session(&self) -> bool {
-        self.endpoints.len() <= 1
-            && self.snapshot.as_deref().is_none_or(|snapshot| {
-                snapshot.workspaces.len() == 1
-                    && snapshot.tabs.len() == 1
-                    && snapshot.panes.len() == 1
-            })
     }
 
     pub(crate) fn surface_size(&self, cols: u16, rows: u16) -> ClientSurfaceSize {

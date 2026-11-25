@@ -108,7 +108,7 @@ Both installations must support machine API forwarding, and the remote server mu
 
 vcer never tiles. The user talks to one master pane, the pane in the first tab of the first workspace, and that pane always fills the screen. Every other pane lives alone in its own tab. `pane split` therefore opens the new pane as a new background tab in the caller's workspace. It still requires `--direction` for compatibility, but the value is ignored. This is intended, not a bug: do not report it as one, do not inspect the caller's layout, and do not pick a split direction.
 
-vcer's main screen is the agent board: every pane is a live box, master the biggest, and the user messages any box from one input line at the bottom. They zoom into a box for its raw terminal with ctrl+b then its number, and return with ctrl+b then space. Your subagents appear on the board as soon as they start, so you do not need to tell the user how to watch them.
+vcer's main screen is the agent board: master's transcript fills most of it, and a rail beside it shows one card per subagent with what it is doing, sorted so agents waiting on the user come first. The user can answer an agent's numbered question from its card, message any agent from one input line, and zoom into an agent's raw terminal with ctrl+b then its number. Your subagents appear on the board as soon as they start, so you do not need to tell the user how to watch them. Give each subagent a short name when you start it, since the board labels cards by that name.
 
 ## Start and coordinate an agent
 

@@ -1685,14 +1685,10 @@ fn read_until_client_attaches(client: &SpawnedHerdr) -> String {
             }
             Err(err) => panic!("read thin client PTY: {err}"),
         }
-        // A lone master session renders without any chrome text, so a
-        // completed synchronized frame is the one reliable sign the client
-        // is up and painting.
         if output.contains('\u{2500}')
             || output.contains("workspace")
             || output.contains("pane")
             || output.contains("terminal")
-            || output.contains("\u{1b}[?2026l")
         {
             return output;
         }

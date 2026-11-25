@@ -380,9 +380,7 @@ fn context_menus_capture_stable_targets_and_route_actions() {
 #[test]
 fn global_menu_opens_from_sidebar_and_routes_client_actions() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    let mut projected = snapshot();
-    super::fan_out(&mut projected);
-    state.set_snapshot(Box::new(projected));
+    state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());
     state.compose(106, 30).expect("shell frame");
     let launcher = state.hits.global_launcher;

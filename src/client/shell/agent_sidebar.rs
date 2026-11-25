@@ -14,76 +14,7 @@ pub(super) struct AgentRow {
     pub(super) pane_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
-    /// Drawn in the status icon slot, in the status color, for known agents.
-    pub(super) icon: Option<&'static str>,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
-}
-
-pub(super) fn agent_icon(agent: &crate::protocol::ClientShellAgent) -> Option<&'static str> {
-    match agent.agent.as_deref()? {
-        "claude" => Some("✳"),
-        "codex" => Some("⬢"),
-        _ => None,
-    }
-}
-
-/// The main session is the pane in the first tab of the first workspace.
-pub(super) fn master_pane_id(snapshot: &ClientShellSnapshot) -> Option<&str> {
-    let workspace = snapshot.workspaces.iter().min_by_key(|ws| ws.number)?;
-    let tab = snapshot
-        .tabs
-        .iter()
-        .filter(|tab| tab.workspace_id == workspace.workspace_id)
-        .min_by_key(|tab| tab.number)?;
-    snapshot
-        .panes
-        .iter()
-        .find(|pane| pane.tab_id == tab.tab_id)
-        .map(|pane| pane.pane_id.as_str())
-}
-
-/// "master" for the main session, otherwise the task the agent reports in
-/// its title, then the name it was started with. Titles that only name the
-/// agent say nothing about the task.
-pub(super) fn agent_headline(
-    snapshot: &ClientShellSnapshot,
-    agent: &crate::protocol::ClientShellAgent,
-) -> String {
-    if master_pane_id(snapshot) == Some(agent.pane_id.as_str()) {
-        return "master".into();
-    }
-    let names_only_the_agent = |title: &str| {
-        let title = title.to_ascii_lowercase();
-        title.is_empty()
-            || agent.agent.as_deref().is_some_and(|name| title == name)
-            || matches!(title.as_str(), "claude code" | "codex")
-    };
-    [
-        agent.title.as_deref(),
-        agent.terminal_title_stripped.as_deref(),
-        agent.terminal_title.as_deref(),
-    ]
-    .into_iter()
-    .flatten()
-    .map(clean_title)
-    .find(|title| !names_only_the_agent(title))
-    .or_else(|| {
-        agent
-            .name
-            .as_deref()
-            .map(clean_title)
-            .filter(|name| !name.is_empty())
-    })
-    .unwrap_or_else(|| "subagent".into())
-}
-
-/// Agents prefix their terminal title with status glyphs such as `◐`, `⠋`
-/// or `✳`, which the row already shows as its icon.
-fn clean_title(title: &str) -> String {
-    crate::ui::sanitize_line(title)
-        .trim_start_matches(|ch: char| !ch.is_alphanumeric() && !"([{\"'`#@~/.".contains(ch))
-        .trim()
-        .to_owned()
 }
 
 pub(super) fn ordered_agent_pane_ids(
@@ -325,8 +256,7 @@ pub(super) fn agent_row(
         .agents
         .iter()
         .find(|agent| agent.pane_id == pane_id)?;
-    // Agents whose workspace has not reached this snapshot yet stay hidden.
-    snapshot
+    let workspace = snapshot
         .workspaces
         .iter()
         .find(|workspace| workspace.workspace_id == agent.workspace_id)?;
@@ -363,14 +293,11 @@ pub(super) fn agent_row(
         .agent
         .as_deref()
         .and_then(crate::detect::parse_agent_label);
-    // vcer has one workspace per session, so the workspace slot carries the
-    // agent's headline instead of repeating the same workspace name.
-    let headline = agent_headline(snapshot, agent);
     let rows = crate::ui::sidebar_agent_rows(
         &config.agents,
         crate::ui::AgentTokenContext {
             machine,
-            workspace: &headline,
+            workspace: &workspace.label,
             tab: tab_label,
             pane: agent
                 .title
@@ -388,7 +315,6 @@ pub(super) fn agent_row(
         pane_id: agent.pane_id.clone(),
         status: agent.agent_status,
         focused: agent.focused,
-        icon: agent_icon(agent),
         rows,
     })
 }
@@ -417,8 +343,7 @@ pub(super) fn render_agent_row(
     let status_style = Style::default().fg(status_color(row.status, palette));
     let secondary = Style::default().fg(palette.overlay0);
     let icon = (
-        row.icon
-            .unwrap_or_else(|| status_icon(row.status, config.status_indicators)),
+        status_icon(row.status, config.status_indicators),
         Style::default().fg(status_color(row.status, palette)),
     );
     let rows = if row.rows.is_empty() {
@@ -454,7 +379,6 @@ pub(super) fn render_agent_row(
     }
 }
 
-/// Lists recent pane-to-pane messages, newest first, two rows each.
 fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
     for (offset, character) in text.chars().take(width as usize).enumerate() {
         if let Some(cell) = buffer.cell_mut((x + offset as u16, y)) {

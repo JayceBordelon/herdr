@@ -27,7 +27,6 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
         tab_bar_right_separator: " ".into(),
         agent_view_label: None,
         agent_order: Vec::new(),
-        peer_messages: Vec::new(),
         workspaces: vec![ClientShellWorkspace {
             workspace_id: "ws_1".into(),
             active_tab_id: "tab_1".into(),
@@ -65,31 +64,6 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
         agents: Vec::new(),
         commands: Vec::new(),
     }
-}
-
-/// Adds a fanned-out background tab and pane. A lone master session renders
-/// without a sidebar, so tests that exercise sidebar chrome start from this.
-pub(super) fn fan_out(snapshot: &mut ClientShellSnapshot) {
-    snapshot.tabs.push(ClientShellTab {
-        tab_id: "tab_fan".into(),
-        workspace_id: "ws_1".into(),
-        number: snapshot.tabs.len() + 1,
-        label: "fan".into(),
-        custom_label: false,
-        zoomed: false,
-        focused: false,
-        agent_status: AgentStatus::Idle,
-    });
-    snapshot.panes.push(ClientShellPane {
-        pane_id: "pane_fan".into(),
-        workspace_id: "ws_1".into(),
-        tab_id: "tab_fan".into(),
-        label: None,
-        cwd: None,
-        foreground_cwd: None,
-        focused: false,
-        right_click_passthrough: false,
-    });
 }
 
 fn worktree_list_result(open_workspace_id: Option<&str>) -> crate::api::schema::ResponseResult {

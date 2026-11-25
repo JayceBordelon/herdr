@@ -27,12 +27,15 @@ Tracing targets follow the bin name, so log filters use `vcer=`, not `herdr=`.
 One master pane, subagents fan out. `pane.split` opens the new pane as its
 own tab (the view is never tiled). The master is the pane in the first tab of
 the first workspace. The main screen is the board (`src/client/shell/board.rs`):
-every pane as a live box, master the biggest, and one input line that sends
-`agent.prompt` to agents or `pane.send_text` to shells. The board is an
-overlay the client entrypoint switches on (`ClientShellState::board`), so
-classic layout tests run without it. Zooming into a box shows the raw pane
-under a one row header. The client only streams the focused pane, so boxes
-poll `pane.read`.
+master's transcript fills most of it, and a rail beside it holds one compact
+card per subagent, sorted by urgency. Cards show the agent's current activity
+and any pending question, which digits answer. Finished agents fold into one
+line, and a ticker above the input reports status changes. The input line
+sends `agent.prompt` to agents and `pane.send_text` to shells. The board is
+an overlay the client entrypoint switches on (`ClientShellState::board`), so
+upstream's classic layout code and its tests run without it. Keep that code
+upstream-shaped. The client only streams the focused pane, so the board polls
+`pane.read`.
 
 Agents running inside vcer learn this model from `skills/herdr/SKILL.md`
 (printed by `vcer --skill`, compiled into the binary). Update it whenever the

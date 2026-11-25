@@ -124,7 +124,6 @@ impl HeadlessServer {
             | self.handle_client_shell_api_request(
                 client_id,
                 api::ApiRequestMessage {
-                    sender_pane_id: None,
                     request: *request,
                     respond_to,
                     response_write_complete: None,
