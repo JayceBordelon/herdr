@@ -279,6 +279,31 @@ pub(crate) fn render_sidebar(
                 Style::default().fg(palette.overlay0),
             );
         }
+        // Peek is otherwise reachable only through prefix+space, which nothing
+        // on screen mentions. Centered between new and menu when it fits.
+        let master = super::super::agent_sidebar::master_pane_id(snapshot);
+        let has_subagents = snapshot
+            .agents
+            .iter()
+            .any(|agent| Some(agent.pane_id.as_str()) != master);
+        const PEEK_LABEL: &str = "▦ peek";
+        let label_width = PEEK_LABEL.chars().count() as u16;
+        let peek_x = content.x + content.width.saturating_sub(label_width) / 2;
+        let fits = peek_x >= content.x + 6
+            && peek_x + label_width < hits.global_launcher.x.saturating_sub(1);
+        if has_subagents && fits {
+            hits.peek_button = Rect::new(peek_x, footer_y, label_width, 1);
+            put_text(
+                buffer,
+                peek_x,
+                footer_y,
+                label_width,
+                PEEK_LABEL,
+                Style::default()
+                    .fg(palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
     }
 
     super::render_agent_panel(

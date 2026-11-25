@@ -919,6 +919,83 @@ mod tests {
         }
     }
 
+    /// Ghostty and other kitty keyboard terminals encode ctrl+b and space
+    /// differently from legacy terminals, and also report key releases. The
+    /// peek binding has to open from every encoding.
+    #[test]
+    fn prefix_space_opens_peek_in_legacy_and_kitty_keyboard_modes() {
+        let encodings: [(&str, &[u8]); 3] = [
+            ("legacy", b"\x02 "),
+            ("kitty", b"\x1b[98;5u\x1b[32u"),
+            (
+                "kitty with releases",
+                b"\x1b[98;5u\x1b[98;5:3u\x1b[32u\x1b[32;1:3u",
+            ),
+        ];
+        for (label, bytes) in encodings {
+            let mut snapshot = super::super::tests::snapshot();
+            super::super::tests::fan_out(&mut snapshot);
+            snapshot.agents = vec![subagent(0, "Refactor auth")];
+            let mut state = ClientShellState::new(ClientShellConfig::from_config(
+                &crate::config::Config::default(),
+            ));
+            state.set_snapshot(Box::new(snapshot));
+            state.set_pane_surface(super::super::tests::surface());
+            state.compose(120, 30).expect("frame");
+            state.handle_raw_events(crate::raw_input::parse_framed_input(bytes));
+            assert!(
+                matches!(state.overlay, Some(ClientShellOverlay::Peek(_))),
+                "{label}: prefix then space should open peek"
+            );
+        }
+    }
+
+    #[test]
+    fn sidebar_peek_button_shows_with_subagents_and_opens_peek_on_click() {
+        let compose = |agents: Vec<crate::protocol::ClientShellAgent>| {
+            let mut snapshot = super::super::tests::snapshot();
+            super::super::tests::fan_out(&mut snapshot);
+            snapshot.agents = agents;
+            let mut state = ClientShellState::new(ClientShellConfig::from_config(
+                &crate::config::Config::default(),
+            ));
+            state.set_snapshot(Box::new(snapshot));
+            state.set_pane_surface(super::super::tests::surface());
+            let frame = state.compose(120, 30).expect("frame");
+            (state, frame)
+        };
+
+        let (state, _) = compose(Vec::new());
+        assert!(state.hits.peek_button.is_empty(), "no subagents, no button");
+
+        let (mut state, frame) = compose(vec![subagent(0, "Refactor auth")]);
+        let button = state.hits.peek_button;
+        assert!(!button.is_empty(), "a subagent shows the button");
+        let label = (button.x..button.right())
+            .map(|x| {
+                frame.cells[(button.y * frame.width + x) as usize]
+                    .symbol
+                    .clone()
+            })
+            .collect::<String>();
+        assert_eq!(label, "▦ peek");
+        for kind in [
+            MouseEventKind::Down(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),
+        ] {
+            state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+                kind,
+                column: button.x + 1,
+                row: button.y,
+                modifiers: crossterm::event::KeyModifiers::empty(),
+            })]);
+        }
+        assert!(
+            matches!(state.overlay, Some(ClientShellOverlay::Peek(_))),
+            "click opens peek"
+        );
+    }
+
     /// Claude Code titles itself "◐ Claude Code" while working, which named
     /// two sidebar rows after the tool instead of their task.
     #[test]

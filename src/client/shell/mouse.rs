@@ -2042,6 +2042,10 @@ impl ClientShellState {
                 if self.handle_endpoint_machine_click(point, outcome) {
                     return;
                 }
+                if super::contains(self.hits.peek_button, point) {
+                    self.open_peek_overlay(outcome);
+                    return;
+                }
                 if super::contains(self.hits.global_launcher, point) {
                     self.toggle_global_menu();
                     outcome.repaint = true;
