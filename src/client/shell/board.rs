@@ -16,8 +16,6 @@ const MIN_BOX_HEIGHT: u16 = 2 + 2;
 /// A tile tall enough to show a few lines of its screen. Below this, a
 /// second column opens instead of squeezing tiles further.
 const MIN_TILE_HEIGHT: u16 = 8;
-const GAP: u16 = 2;
-const MARGIN: u16 = 2;
 /// Master sits beside the tiles at this width, above them below it.
 const SIDE_BY_SIDE_WIDTH: u16 = 90;
 
@@ -56,11 +54,12 @@ pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
     } else {
         Rect::default()
     };
+    // Flush: no margins and no gaps, like any native terminal layout.
     let body = Rect::new(
-        area.x.saturating_add(MARGIN),
-        area.y.saturating_add(2),
-        area.width.saturating_sub(MARGIN * 2),
-        area.height.saturating_sub(4),
+        area.x,
+        area.y + 1,
+        area.width,
+        area.height.saturating_sub(2),
     );
     let fits = |rect: Rect| rect.width >= MIN_BOX_WIDTH && rect.height >= MIN_BOX_HEIGHT;
     let mut boxes = Vec::new();
@@ -73,9 +72,9 @@ pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
                 (
                     Rect::new(body.x, body.y, width, body.height),
                     Rect::new(
-                        body.x + width + GAP,
+                        body.x + width,
                         body.y,
-                        body.width.saturating_sub(width + GAP),
+                        body.width.saturating_sub(width),
                         body.height,
                     ),
                 )
@@ -86,15 +85,25 @@ pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
                     Rect::new(body.x, body.y, body.width, height),
                     Rect::new(
                         body.x,
-                        body.y + height + 1,
+                        body.y + height,
                         body.width,
-                        body.height.saturating_sub(height + 1),
+                        body.height.saturating_sub(height),
                     ),
                 )
             };
             if fits(master) {
                 boxes.push(master);
-                boxes.extend(tile_grid(tiles, count - 1));
+                // Neighbors share one border line, like native terminal panes.
+                boxes.extend(tile_grid(tiles, count - 1).into_iter().map(|tile| {
+                    let left = u16::from(tile.x > body.x);
+                    let up = u16::from(tile.y > body.y);
+                    Rect::new(
+                        tile.x - left,
+                        tile.y - up,
+                        tile.width + left,
+                        tile.height + up,
+                    )
+                }));
             }
         }
     }
@@ -105,37 +114,43 @@ pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
     }
 }
 
-/// Tiles fill their area top to bottom in one column. A second column only
-/// opens once one column cannot show every tile at a readable height, and
-/// only while both columns stay wide enough.
+/// Tiles fill their area top to bottom in one column, touching like panes.
+/// A second column only opens once one column cannot show every tile at a
+/// readable height. Leftover rows and columns go to the last tile so the
+/// grid ends exactly at the edge, and a partly filled last row stretches.
 fn tile_grid(area: Rect, count: usize) -> Vec<Rect> {
     if count == 0 || area.width < MIN_BOX_WIDTH || area.height < MIN_BOX_HEIGHT {
         return Vec::new();
     }
-    let one_column_rows = ((area.height + 1) / (MIN_TILE_HEIGHT + 1)).max(1) as usize;
+    let one_column_rows = (area.height / MIN_TILE_HEIGHT).max(1) as usize;
     let mut columns = if count > one_column_rows { 2 } else { 1 };
-    while columns > 1 && area.width.saturating_sub(GAP) / (columns as u16) < MIN_BOX_WIDTH {
+    while columns > 1 && area.width / (columns as u16) < MIN_BOX_WIDTH {
         columns -= 1;
     }
-    let max_rows = ((area.height + 1) / (MIN_BOX_HEIGHT + 1)) as usize;
+    let max_rows = (area.height / MIN_BOX_HEIGHT) as usize;
     let count = count.min(max_rows * columns);
-    let rows = count.div_ceil(columns) as u16;
-    let width = area.width.saturating_sub(GAP * (columns as u16 - 1)) / columns as u16;
-    let height = area.height.saturating_sub(rows - 1) / rows;
-    // A partly filled last row stretches across, so no hole sits beside it.
-    let last_row = rows - 1;
-    let last_count = count - last_row as usize * columns;
-    let last_width = area.width.saturating_sub(GAP * (last_count as u16 - 1)) / last_count as u16;
+    let rows = count.div_ceil(columns);
+    let split = |total: u16, parts: usize, index: usize| -> (u16, u16) {
+        let size = total / parts as u16;
+        let start = size * index as u16;
+        let end = if index + 1 == parts {
+            total
+        } else {
+            start + size
+        };
+        (start, end - start)
+    };
     (0..count)
         .map(|index| {
-            let (row, column) = ((index / columns) as u16, (index % columns) as u16);
-            let width = if row == last_row { last_width } else { width };
-            Rect::new(
-                area.x + column * (width + GAP),
-                area.y + row * (height + 1),
-                width,
-                height,
-            )
+            let (row, column) = (index / columns, index % columns);
+            let in_row = if row + 1 == rows {
+                count - row * columns
+            } else {
+                columns
+            };
+            let (x, width) = split(area.width, in_row, column);
+            let (y, height) = split(area.height, rows, row);
+            Rect::new(area.x + x, area.y + y, width, height)
         })
         .collect()
 }
@@ -466,9 +481,25 @@ pub(super) fn render_board(
         layout.boxes.len(),
         palette,
     );
-    for (index, (pane_id, rect)) in board.pane_ids.iter().zip(&layout.boxes).enumerate() {
-        render_box(buffer, *rect, index, board, snapshot, pane_id, palette);
-        rendered.board_boxes.push((*rect, index));
+    // Frames first, the selected one last so its accent outline stays whole
+    // where borders are shared. Titles and content go on top afterwards, so
+    // no frame drawn later can cut through a neighbor's title.
+    let boxes = board
+        .pane_ids
+        .iter()
+        .zip(&layout.boxes)
+        .enumerate()
+        .collect::<Vec<_>>();
+    let frame_order = boxes
+        .iter()
+        .filter(|(index, _)| *index != board.selected)
+        .chain(boxes.iter().filter(|(index, _)| *index == board.selected));
+    for (index, (pane_id, rect)) in frame_order {
+        render_box_frame(buffer, **rect, *index, board, snapshot, pane_id, palette);
+    }
+    for (index, (pane_id, rect)) in &boxes {
+        render_box(buffer, **rect, *index, board, snapshot, pane_id, palette);
+        rendered.board_boxes.push((**rect, *index));
     }
     rendered.cursor = render_input(buffer, layout.input, board, snapshot, palette);
     Some(rendered)
@@ -583,7 +614,8 @@ fn render_board_header(
     if row.is_empty() {
         return;
     }
-    let bg = palette.panel_bg;
+    // The terminal's own background, so vcer reads as part of it.
+    let bg = ratatui::style::Color::Reset;
     for x in row.x..row.right() {
         buffer[(x, row.y)]
             .set_symbol(" ")
@@ -694,8 +726,6 @@ fn rounded_box(
     if rect.width < 2 || rect.height < 2 {
         return None;
     }
-    // Only the interior is shaded. Border cells keep the terminal background
-    // so no stripe of box color shows past the line.
     for y in rect.y + 1..rect.bottom() - 1 {
         for x in rect.x + 1..rect.right() - 1 {
             buffer[(x, y)]
@@ -706,17 +736,21 @@ fn rounded_box(
     let border = border.bg(ratatui::style::Color::Reset);
     let (right, bottom) = (rect.right() - 1, rect.bottom() - 1);
     for x in rect.x..=right {
-        let (top, low) = match x {
-            x if x == rect.x => ("╭", "╰"),
-            x if x == right => ("╮", "╯"),
-            _ => ("─", "─"),
+        let ends = if x == rect.x {
+            RIGHT
+        } else if x == right {
+            LEFT
+        } else {
+            LEFT | RIGHT
         };
-        buffer[(x, rect.y)].set_symbol(top).set_style(border);
-        buffer[(x, bottom)].set_symbol(low).set_style(border);
+        let top_arms = ends | if x == rect.x || x == right { DOWN } else { 0 };
+        let bottom_arms = ends | if x == rect.x || x == right { UP } else { 0 };
+        draw_edge(buffer, x, rect.y, top_arms, border);
+        draw_edge(buffer, x, bottom, bottom_arms, border);
     }
     for y in rect.y + 1..bottom {
-        buffer[(rect.x, y)].set_symbol("│").set_style(border);
-        buffer[(right, y)].set_symbol("│").set_style(border);
+        draw_edge(buffer, rect.x, y, UP | DOWN, border);
+        draw_edge(buffer, right, y, UP | DOWN, border);
     }
     Some(Rect::new(
         rect.x + 1,
@@ -724,6 +758,80 @@ fn rounded_box(
         rect.width - 2,
         rect.height - 2,
     ))
+}
+
+const UP: u8 = 1;
+const DOWN: u8 = 2;
+const LEFT: u8 = 4;
+const RIGHT: u8 = 8;
+
+/// The directions a box drawing character reaches, as `UP | DOWN | ...`.
+fn edge_arms(symbol: &str) -> u8 {
+    match symbol {
+        "─" => LEFT | RIGHT,
+        "│" => UP | DOWN,
+        "╭" | "┌" => DOWN | RIGHT,
+        "╮" | "┐" => DOWN | LEFT,
+        "╰" | "└" => UP | RIGHT,
+        "╯" | "┘" => UP | LEFT,
+        "├" => UP | DOWN | RIGHT,
+        "┤" => UP | DOWN | LEFT,
+        "┬" => DOWN | LEFT | RIGHT,
+        "┴" => UP | LEFT | RIGHT,
+        "┼" => UP | DOWN | LEFT | RIGHT,
+        _ => 0,
+    }
+}
+
+fn edge_symbol(arms: u8) -> &'static str {
+    match arms {
+        a if a == LEFT | RIGHT || a == LEFT || a == RIGHT => "─",
+        a if a == UP | DOWN || a == UP || a == DOWN => "│",
+        a if a == DOWN | RIGHT => "╭",
+        a if a == DOWN | LEFT => "╮",
+        a if a == UP | RIGHT => "╰",
+        a if a == UP | LEFT => "╯",
+        a if a == UP | DOWN | RIGHT => "├",
+        a if a == UP | DOWN | LEFT => "┤",
+        a if a == DOWN | LEFT | RIGHT => "┬",
+        a if a == UP | LEFT | RIGHT => "┴",
+        _ => "┼",
+    }
+}
+
+/// Draws a border cell, joining any line already there into a junction so
+/// boxes that share an edge show one line with proper tees and crosses.
+fn draw_edge(buffer: &mut Buffer, x: u16, y: u16, arms: u8, style: Style) {
+    let cell = &mut buffer[(x, y)];
+    let joined = edge_arms(cell.symbol()) | arms;
+    cell.set_symbol(edge_symbol(joined)).set_style(style);
+}
+
+/// The box outline: accent when selected, red when the agent needs the
+/// user, quiet otherwise. Shared edges join into junctions.
+fn render_box_frame(
+    buffer: &mut Buffer,
+    rect: Rect,
+    index: usize,
+    board: &ClientBoardOverlay,
+    snapshot: &ClientShellSnapshot,
+    pane_id: &str,
+    palette: &Palette,
+) {
+    let (_, _, status) = box_identity(snapshot, pane_id);
+    let color = if index == board.selected {
+        palette.accent
+    } else if status == Some(crate::api::schema::AgentStatus::Blocked) {
+        palette.red
+    } else {
+        palette.surface1
+    };
+    rounded_box(
+        buffer,
+        rect,
+        Style::default().fg(color),
+        ratatui::style::Color::Reset,
+    );
 }
 
 /// `╭─ 1  ✳ headline ───────── ⠹ working 2m ─╮` over the agent's own screen,
@@ -739,18 +847,13 @@ fn render_box(
 ) {
     let selected = index == board.selected;
     let (icon, headline, status) = box_identity(snapshot, pane_id);
-    let blocked = status == Some(crate::api::schema::AgentStatus::Blocked);
-    let border_color = if selected {
-        palette.accent
-    } else if blocked {
-        palette.red
-    } else {
-        palette.surface1
-    };
-    let bg = palette.panel_bg;
-    let Some(inner) = rounded_box(buffer, rect, Style::default().fg(border_color), bg) else {
+    // The terminal's own background, so vcer reads as part of it.
+    let bg = ratatui::style::Color::Reset;
+    let rect = rect.intersection(buffer.area);
+    if rect.width < 2 || rect.height < 2 {
         return;
-    };
+    }
+    let inner = Rect::new(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
 
     // Title row inside the top border.
     let (pill, pill_style) = status_pill(board, pane_id, status, palette);
@@ -1209,7 +1312,8 @@ pub(super) fn render_zoom_header(
     if row.is_empty() {
         return;
     }
-    let bg = palette.panel_bg;
+    // The terminal's own background, so vcer reads as part of it.
+    let bg = ratatui::style::Color::Reset;
     for x in row.x..row.right() {
         buffer[(x, row.y)]
             .set_symbol(" ")
@@ -1441,41 +1545,36 @@ mod tests {
                 );
             }
         }
+        const CORNERS: &[&str] = &["╭", "╮", "╰", "╯", "├", "┤", "┬", "┴", "┼"];
+        const VERTICAL: &[&str] = &["│", "├", "┤", "┼"];
         for (index, tile) in boxes.iter().enumerate() {
             assert!(
                 tile.right() <= area.right() && tile.bottom() <= area.bottom(),
                 "{context}: box {index} {tile:?} leaves {area:?}"
             );
             for other in &boxes[index + 1..] {
+                let shared = tile.intersection(*other);
                 assert!(
-                    tile.intersection(*other).is_empty(),
-                    "{context}: boxes overlap"
+                    shared.is_empty() || shared.width == 1 || shared.height == 1,
+                    "{context}: boxes overlap past a shared border: {shared:?}"
                 );
             }
             let (left, right, top, bottom) = (tile.x, tile.right() - 1, tile.y, tile.bottom() - 1);
-            for (x, y, expected) in [
-                (left, top, "╭"),
-                (right, top, "╮"),
-                (left, bottom, "╰"),
-                (right, bottom, "╯"),
-            ] {
-                assert_eq!(
-                    buffer[(x, y)].symbol(),
-                    expected,
-                    "{context}: corner of box {index}"
+            for (x, y) in [(left, top), (right, top), (left, bottom), (right, bottom)] {
+                let symbol = buffer[(x, y)].symbol();
+                assert!(
+                    CORNERS.contains(&symbol),
+                    "{context}: corner of box {index} at ({x},{y}) is {symbol:?}"
                 );
             }
             for y in top + 1..bottom {
-                assert_eq!(
-                    buffer[(left, y)].symbol(),
-                    "│",
-                    "{context}: left edge of box {index}"
-                );
-                assert_eq!(
-                    buffer[(right, y)].symbol(),
-                    "│",
-                    "{context}: right edge of box {index}"
-                );
+                for x in [left, right] {
+                    let symbol = buffer[(x, y)].symbol();
+                    assert!(
+                        VERTICAL.contains(&symbol),
+                        "{context}: edge of box {index} at ({x},{y}) is {symbol:?}"
+                    );
+                }
                 assert_eq!(
                     buffer[(right - 1, y)].symbol(),
                     " ",
@@ -1530,16 +1629,16 @@ mod tests {
         let area = Rect::new(0, 0, 130, 34);
         let alone = board_layout(area, 1);
         assert_eq!(alone.boxes.len(), 1);
-        assert_eq!(alone.boxes[0].width, 126);
+        assert_eq!(alone.boxes[0].width, 130, "flush to both edges");
         let wide = board_layout(area, 4);
         assert_eq!(wide.boxes.len(), 4);
         assert!(
-            wide.boxes[1].x > wide.boxes[0].right(),
+            wide.boxes[1].x + 1 == wide.boxes[0].right(),
             "tiles beside master when wide"
         );
         let narrow = board_layout(Rect::new(0, 0, 80, 40), 3);
         assert!(
-            narrow.boxes[1].y > narrow.boxes[0].bottom(),
+            narrow.boxes[1].y + 1 == narrow.boxes[0].bottom(),
             "tiles below master when narrow"
         );
         assert_eq!(alone.input.y, 33, "input line sits on the last row");
