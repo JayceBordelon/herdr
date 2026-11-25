@@ -13,10 +13,9 @@ const MAX_BOXES: usize = 9;
 const MIN_BOX_WIDTH: u16 = 28;
 /// Borders plus the name and status rows. Shorter boxes are not drawn.
 const MIN_BOX_HEIGHT: u16 = 2 + 2;
-/// Borders, chrome and twelve preview rows for a subagent tile.
-const MAX_TILE_HEIGHT: u16 = 2 + BOX_CHROME_ROWS + 12;
-/// Box rows before the screen preview: name, status, rule.
-const BOX_CHROME_ROWS: u16 = 3;
+/// A tile tall enough to show a few lines of its screen. Below this, a
+/// second column opens instead of squeezing tiles further.
+const MIN_TILE_HEIGHT: u16 = 8;
 const GAP: u16 = 2;
 const MARGIN: u16 = 2;
 /// Master sits beside the tiles at this width, above them below it.
@@ -34,6 +33,11 @@ pub(super) struct ClientBoardOverlay {
     pub(super) input: TextEditor,
     prefix_pending: bool,
     next_poll: Option<std::time::Instant>,
+    /// When each agent entered its current status, for the elapsed clock.
+    since: HashMap<String, (crate::api::schema::AgentStatus, std::time::Instant)>,
+    /// Spinner frame and render clock, advanced by the client timer.
+    frame: usize,
+    now: Option<std::time::Instant>,
 }
 
 pub(super) struct BoardLayout {
@@ -44,7 +48,7 @@ pub(super) struct BoardLayout {
 }
 
 /// Header on top, input line at the bottom, boxes between. Master takes the
-/// left three fifths on wide screens and the top three fifths otherwise.
+/// left three fifths on wide screens and the top half otherwise.
 pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
     let header = Rect::new(area.x, area.y, area.width, u16::from(area.height > 0));
     let input = if area.height >= 3 {
@@ -76,7 +80,8 @@ pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
                     ),
                 )
             } else {
-                let height = (body.height * 3 / 5).max(MIN_BOX_HEIGHT);
+                // Stacked, the tiles need more room than beside master.
+                let height = (body.height / 2).max(MIN_BOX_HEIGHT);
                 (
                     Rect::new(body.x, body.y, body.width, height),
                     Rect::new(
@@ -100,12 +105,15 @@ pub(super) fn board_layout(area: Rect, count: usize) -> BoardLayout {
     }
 }
 
-/// Top aligned tiles, at most two across, as many as fit at the minimum size.
+/// Tiles fill their area top to bottom in one column. A second column only
+/// opens once one column cannot show every tile at a readable height, and
+/// only while both columns stay wide enough.
 fn tile_grid(area: Rect, count: usize) -> Vec<Rect> {
     if count == 0 || area.width < MIN_BOX_WIDTH || area.height < MIN_BOX_HEIGHT {
         return Vec::new();
     }
-    let mut columns = count.min(2);
+    let one_column_rows = ((area.height + 1) / (MIN_TILE_HEIGHT + 1)).max(1) as usize;
+    let mut columns = if count > one_column_rows { 2 } else { 1 };
     while columns > 1 && area.width.saturating_sub(GAP) / (columns as u16) < MIN_BOX_WIDTH {
         columns -= 1;
     }
@@ -113,10 +121,15 @@ fn tile_grid(area: Rect, count: usize) -> Vec<Rect> {
     let count = count.min(max_rows * columns);
     let rows = count.div_ceil(columns) as u16;
     let width = area.width.saturating_sub(GAP * (columns as u16 - 1)) / columns as u16;
-    let height = (area.height.saturating_sub(rows - 1) / rows).min(MAX_TILE_HEIGHT);
+    let height = area.height.saturating_sub(rows - 1) / rows;
+    // A partly filled last row stretches across, so no hole sits beside it.
+    let last_row = rows - 1;
+    let last_count = count - last_row as usize * columns;
+    let last_width = area.width.saturating_sub(GAP * (last_count as u16 - 1)) / last_count as u16;
     (0..count)
         .map(|index| {
             let (row, column) = ((index / columns) as u16, (index % columns) as u16);
+            let width = if row == last_row { last_width } else { width };
             Rect::new(
                 area.x + column * (width + GAP),
                 area.y + row * (height + 1),
@@ -168,11 +181,21 @@ impl ClientShellState {
             self.open_board(outcome);
             return;
         }
-        let due = matches!(
-            &self.overlay,
-            Some(ClientShellOverlay::Board(board)) if board.next_poll.is_none_or(|at| at <= now)
-        );
-        if due {
+        let working = self.snapshot.as_deref().is_some_and(|snapshot| {
+            snapshot
+                .agents
+                .iter()
+                .any(|agent| agent.agent_status == crate::api::schema::AgentStatus::Working)
+        });
+        let Some(ClientShellOverlay::Board(board)) = self.overlay.as_mut() else {
+            return;
+        };
+        board.now = Some(now);
+        if working {
+            board.frame = board.frame.wrapping_add(1);
+            outcome.repaint = true;
+        }
+        if board.next_poll.is_none_or(|at| at <= now) {
             self.poll_board(now, outcome);
         }
     }
@@ -181,10 +204,30 @@ impl ClientShellState {
         let mut pane_ids = self.board_pane_ids();
         let total = pane_ids.len();
         pane_ids.truncate(MAX_BOXES);
+        let statuses = self.snapshot.as_deref().map_or_else(Vec::new, |snapshot| {
+            snapshot
+                .agents
+                .iter()
+                .map(|agent| (agent.pane_id.clone(), agent.agent_status))
+                .collect::<Vec<_>>()
+        });
         let Some(ClientShellOverlay::Board(board)) = self.overlay.as_mut() else {
             return;
         };
         board.next_poll = Some(now + POLL_INTERVAL);
+        board.now = Some(now);
+        board
+            .since
+            .retain(|pane_id, _| statuses.iter().any(|(id, _)| id == pane_id));
+        for (pane_id, status) in statuses {
+            let changed = board
+                .since
+                .get(&pane_id)
+                .is_none_or(|(seen, _)| *seen != status);
+            if changed {
+                board.since.insert(pane_id, (status, now));
+            }
+        }
         if board.total != total || board.pane_ids != pane_ids {
             let selected = board.pane_ids.get(board.selected).cloned();
             board
@@ -209,8 +252,8 @@ impl ClientShellState {
                     pane_id: pane_id.clone(),
                     source: crate::api::schema::ReadSource::Visible,
                     lines: None,
-                    format: crate::api::schema::ReadFormat::Text,
-                    strip_ansi: true,
+                    format: crate::api::schema::ReadFormat::Ansi,
+                    strip_ansi: false,
                     intent: crate::api::schema::ReadIntent::Passive,
                 }),
                 PendingEndpointKind::BoardRead { pane_id },
@@ -424,16 +467,7 @@ pub(super) fn render_board(
         palette,
     );
     for (index, (pane_id, rect)) in board.pane_ids.iter().zip(&layout.boxes).enumerate() {
-        render_box(
-            buffer,
-            *rect,
-            index,
-            index == board.selected,
-            snapshot,
-            pane_id,
-            board.previews.get(pane_id).map(String::as_str),
-            palette,
-        );
+        render_box(buffer, *rect, index, board, snapshot, pane_id, palette);
         rendered.board_boxes.push((*rect, index));
     }
     rendered.cursor = render_input(buffer, layout.input, board, snapshot, palette);
@@ -488,8 +522,55 @@ fn box_identity(
     }
 }
 
-/// Header segments in the order they are dropped when the row is too
-/// narrow: the hint first, then counts from the right. The title stays.
+const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+fn elapsed_label(since: std::time::Duration) -> String {
+    let seconds = since.as_secs();
+    match seconds {
+        0..60 => format!("{seconds}s"),
+        60..3600 => format!("{}m", seconds / 60),
+        _ => format!("{}h {}m", seconds / 3600, seconds % 3600 / 60),
+    }
+}
+
+/// Status pill text and color: a spinner and clock while working, a loud
+/// marker when the agent needs the user, quiet words otherwise.
+fn status_pill(
+    board: &ClientBoardOverlay,
+    pane_id: &str,
+    status: Option<crate::api::schema::AgentStatus>,
+    palette: &Palette,
+) -> (String, Style) {
+    use crate::api::schema::AgentStatus;
+    let elapsed = board
+        .since
+        .get(pane_id)
+        .zip(board.now)
+        .map(|((_, since), now)| elapsed_label(now.saturating_duration_since(*since)));
+    let with_clock = |text: String| match &elapsed {
+        Some(elapsed) => format!("{text} {elapsed}"),
+        None => text,
+    };
+    match status {
+        Some(AgentStatus::Working) => (
+            with_clock(format!("{} working", SPINNER[board.frame % SPINNER.len()])),
+            Style::default().fg(palette.yellow),
+        ),
+        Some(AgentStatus::Blocked) => (
+            with_clock("● needs you".into()),
+            Style::default()
+                .fg(palette.red)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Some(AgentStatus::Done) => ("✓ done".into(), Style::default().fg(palette.teal)),
+        Some(AgentStatus::Idle) => ("idle".into(), Style::default().fg(palette.overlay0)),
+        Some(AgentStatus::Unknown) => ("…".into(), Style::default().fg(palette.overlay0)),
+        None => ("shell".into(), Style::default().fg(palette.overlay0)),
+    }
+}
+
+/// The top bar: wordmark, how many agents, live counts, and the zoom hint.
+/// The hint drops first, then counts from the right.
 fn render_board_header(
     buffer: &mut Buffer,
     row: Rect,
@@ -498,6 +579,7 @@ fn render_board_header(
     shown: usize,
     palette: &Palette,
 ) {
+    use crate::api::schema::AgentStatus;
     if row.is_empty() {
         return;
     }
@@ -507,207 +589,512 @@ fn render_board_header(
             .set_symbol(" ")
             .set_style(Style::default().bg(bg));
     }
-    let count_status = |status: crate::api::schema::AgentStatus| {
-        board
-            .pane_ids
+    let subagents = board.total.saturating_sub(1);
+    let summary = match subagents {
+        0 => "master".to_owned(),
+        1 => "master + 1 subagent".to_owned(),
+        n if shown < board.total.min(MAX_BOXES) || board.total > MAX_BOXES => {
+            format!("master + {n} subagents ({} shown)", shown.saturating_sub(1))
+        }
+        n => format!("master + {n} subagents"),
+    };
+    let count = |wanted: AgentStatus| {
+        snapshot
+            .agents
             .iter()
-            .filter(|pane_id| {
-                snapshot
-                    .agents
-                    .iter()
-                    .any(|agent| &agent.pane_id == *pane_id && agent.agent_status == status)
-            })
+            .filter(|agent| agent.agent_status == wanted)
             .count()
     };
-    use crate::api::schema::AgentStatus;
-    let agents = board.total.saturating_sub(1);
-    let mut segments: Vec<(String, Style)> = vec![(
-        " vcer".into(),
-        Style::default()
-            .fg(palette.accent)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    )];
-    let summary = match (agents, shown < board.pane_ids.len().min(board.total)) {
-        (0, _) => "  ·  master only".to_owned(),
-        (1, _) => "  ·  1 subagent".to_owned(),
-        (n, false) => format!("  ·  {n} subagents"),
-        (n, true) => format!("  ·  {n} subagents, {} shown", shown.saturating_sub(1)),
-    };
-    segments.push((summary, Style::default().fg(palette.subtext0).bg(bg)));
+    let mut right: Vec<(String, Style)> = Vec::new();
     for (status, label, color) in [
         (AgentStatus::Working, "working", palette.yellow),
         (AgentStatus::Blocked, "need you", palette.red),
         (AgentStatus::Done, "done", palette.teal),
     ] {
-        let count = count_status(status);
-        if count > 0 {
-            segments.push((
-                format!("  {count} {label}"),
-                Style::default().fg(color).bg(bg),
-            ));
+        let n = count(status);
+        if n > 0 {
+            right.push((format!("● {n} {label}"), Style::default().fg(color).bg(bg)));
         }
     }
-    let hint = "⌃b 1-9 zoom ";
-    let available = row.width as usize;
-    let mut used = 0usize;
-    let mut kept = 0usize;
-    for (text, _) in &segments {
-        if used + width_of(text) > available {
+    let hint = (
+        "⌃b space zoom".to_owned(),
+        Style::default().fg(palette.overlay0).bg(bg),
+    );
+
+    let brand = " ◆ vcer ";
+    let brand_style = Style::default()
+        .fg(palette.accent)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD);
+    let mut x = put(buffer, row.x, row.y, row.width, brand, brand_style);
+    x = put(
+        buffer,
+        x,
+        row.y,
+        row.right().saturating_sub(x),
+        "│ ",
+        Style::default().fg(palette.surface1).bg(bg),
+    );
+    let left_end = put(
+        buffer,
+        x,
+        row.y,
+        row.right().saturating_sub(x),
+        &summary,
+        Style::default().fg(palette.text).bg(bg),
+    );
+
+    // Right side, built from the edge inward with two spaces between parts.
+    let mut parts = right;
+    parts.push(hint);
+    loop {
+        let total: usize = parts
+            .iter()
+            .map(|(text, _)| width_of(text) + 3)
+            .sum::<usize>()
+            + 1;
+        if parts.is_empty() || (left_end as usize) + 2 + total <= row.right() as usize {
             break;
         }
-        used += width_of(text);
-        kept += 1;
+        parts.pop();
     }
-    let mut x = row.x;
-    for (text, style) in segments.iter().take(kept.max(1)) {
+    let total: usize = parts
+        .iter()
+        .map(|(text, _)| width_of(text) + 3)
+        .sum::<usize>();
+    let mut x = row.right().saturating_sub(total as u16 + 1);
+    for (text, style) in parts {
         x = put(
             buffer,
             x,
             row.y,
             row.right().saturating_sub(x),
-            text,
-            *style,
+            "   ",
+            Style::default().bg(bg),
         );
-    }
-    if used + width_of(hint) + 2 <= available {
-        let hint_x = row.right() - width_of(hint) as u16;
-        put(
+        x = put(
             buffer,
-            hint_x,
+            x,
             row.y,
-            width_of(hint) as u16,
-            hint,
-            Style::default().fg(palette.overlay0).bg(bg),
+            row.right().saturating_sub(x),
+            &text,
+            style,
         );
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// A rounded box filled with `bg`. Returns the area inside the border.
+fn rounded_box(
+    buffer: &mut Buffer,
+    rect: Rect,
+    border: Style,
+    bg: ratatui::style::Color,
+) -> Option<Rect> {
+    let rect = rect.intersection(buffer.area);
+    if rect.width < 2 || rect.height < 2 {
+        return None;
+    }
+    // Only the interior is shaded. Border cells keep the terminal background
+    // so no stripe of box color shows past the line.
+    for y in rect.y + 1..rect.bottom() - 1 {
+        for x in rect.x + 1..rect.right() - 1 {
+            buffer[(x, y)]
+                .set_symbol(" ")
+                .set_style(Style::default().bg(bg));
+        }
+    }
+    let border = border.bg(ratatui::style::Color::Reset);
+    let (right, bottom) = (rect.right() - 1, rect.bottom() - 1);
+    for x in rect.x..=right {
+        let (top, low) = match x {
+            x if x == rect.x => ("╭", "╰"),
+            x if x == right => ("╮", "╯"),
+            _ => ("─", "─"),
+        };
+        buffer[(x, rect.y)].set_symbol(top).set_style(border);
+        buffer[(x, bottom)].set_symbol(low).set_style(border);
+    }
+    for y in rect.y + 1..bottom {
+        buffer[(rect.x, y)].set_symbol("│").set_style(border);
+        buffer[(right, y)].set_symbol("│").set_style(border);
+    }
+    Some(Rect::new(
+        rect.x + 1,
+        rect.y + 1,
+        rect.width - 2,
+        rect.height - 2,
+    ))
+}
+
+/// `╭─ 1  ✳ headline ───────── ⠹ working 2m ─╮` over the agent's own screen,
+/// in its own colors, newest line at the bottom.
 fn render_box(
     buffer: &mut Buffer,
     rect: Rect,
     index: usize,
-    selected: bool,
+    board: &ClientBoardOverlay,
     snapshot: &ClientShellSnapshot,
     pane_id: &str,
-    preview: Option<&str>,
     palette: &Palette,
 ) {
+    let selected = index == board.selected;
     let (icon, headline, status) = box_identity(snapshot, pane_id);
-    let tone = status.map_or(palette.overlay0, |status| status_color(status, palette));
-    let border = if selected { palette.accent } else { tone };
-    let Some(inner) = super::render::overlay_panel(buffer, rect, border, palette.panel_bg) else {
-        return;
+    let blocked = status == Some(crate::api::schema::AgentStatus::Blocked);
+    let border_color = if selected {
+        palette.accent
+    } else if blocked {
+        palette.red
+    } else {
+        palette.surface1
     };
     let bg = palette.panel_bg;
-    put(
-        buffer,
-        rect.x + 2,
-        rect.y,
-        rect.width.saturating_sub(4),
-        &format!(" {} ", index + 1),
+    let Some(inner) = rounded_box(buffer, rect, Style::default().fg(border_color), bg) else {
+        return;
+    };
+
+    // Title row inside the top border.
+    let (pill, pill_style) = status_pill(board, pane_id, status, palette);
+    let pill_width = width_of(&pill) as u16 + 2;
+    let title_y = rect.y;
+    let edge = ratatui::style::Color::Reset;
+    let title_right = rect.right().saturating_sub(2);
+    let badge = format!(" {} ", index + 1);
+    let badge_style = if selected {
         Style::default()
-            .fg(if selected {
-                palette.accent_foreground()
-            } else {
-                palette.accent
-            })
-            .bg(if selected { palette.accent } else { bg })
-            .add_modifier(Modifier::BOLD),
-    );
-    let width = inner.width.saturating_sub(2);
-    let left = inner.x + 1;
+            .fg(palette.accent_foreground())
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(palette.overlay1).bg(edge)
+    };
+    let after_badge = rect.x + 2 + width_of(&badge) as u16;
+    let show_pill = title_right.saturating_sub(after_badge) > pill_width + 12;
+    let limit = if show_pill {
+        title_right.saturating_sub(pill_width + 1)
+    } else {
+        title_right
+    };
+    let icon_color = status.map_or(palette.overlay0, |status| status_color(status, palette));
+    let name_style = Style::default()
+        .fg(if selected {
+            palette.text
+        } else {
+            palette.subtext0
+        })
+        .bg(edge)
+        .add_modifier(Modifier::BOLD);
+    let gap = Style::default().bg(edge);
     let mut x = put(
         buffer,
-        left,
-        inner.y,
-        width,
-        icon,
-        Style::default().fg(tone).bg(bg),
+        rect.x + 2,
+        title_y,
+        limit.saturating_sub(rect.x + 2),
+        &badge,
+        badge_style,
     );
+    x = put(buffer, x, title_y, limit.saturating_sub(x), " ", gap);
     x = put(
         buffer,
         x,
-        inner.y,
-        width.saturating_sub(x - left),
-        " ",
-        Style::default().bg(bg),
+        title_y,
+        limit.saturating_sub(x),
+        icon,
+        Style::default().fg(icon_color).bg(edge),
     );
-    put(
+    x = put(buffer, x, title_y, limit.saturating_sub(x), " ", gap);
+    x = put(
         buffer,
         x,
-        inner.y,
-        width.saturating_sub(x - left),
+        title_y,
+        limit.saturating_sub(x + 1),
         &headline,
-        Style::default()
-            .fg(palette.text)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
+        name_style,
     );
-    if inner.height < 2 {
+    put(buffer, x, title_y, limit.saturating_sub(x), " ", gap);
+    if show_pill {
+        let x = put(
+            buffer,
+            title_right.saturating_sub(pill_width),
+            title_y,
+            1,
+            " ",
+            gap,
+        );
+        let x = put(
+            buffer,
+            x,
+            title_y,
+            pill_width - 2,
+            &pill,
+            pill_style.bg(edge),
+        );
+        put(buffer, x, title_y, 1, " ", gap);
+    }
+
+    // Content: the pane's own screen, padded one column each side.
+    let content = Rect::new(
+        inner.x + 1,
+        inner.y,
+        inner.width.saturating_sub(2),
+        inner.height,
+    );
+    if content.is_empty() {
         return;
     }
-    let state = match status {
-        Some(crate::api::schema::AgentStatus::Blocked) => "needs you",
-        Some(other) => status_text(other),
-        None => "shell",
-    };
-    put(
-        buffer,
-        left,
-        inner.y + 1,
-        width,
-        state,
-        Style::default().fg(tone).bg(bg),
-    );
-    if inner.height < BOX_CHROME_ROWS {
-        return;
-    }
-    let rule = "┄".repeat(inner.width as usize);
-    put(
-        buffer,
-        inner.x,
-        inner.y + 2,
-        inner.width,
-        &rule,
-        Style::default().fg(palette.surface_dim).bg(bg),
-    );
-    let body_rows = inner.height.saturating_sub(BOX_CHROME_ROWS) as usize;
-    let lines = preview.map(preview_tail).unwrap_or_default();
+    let base = Style::default().fg(palette.text).bg(bg);
+    let lines = board
+        .previews
+        .get(pane_id)
+        .map(|text| preview_lines(text))
+        .unwrap_or_default();
     if lines.is_empty() {
-        let waiting = if preview.is_some() {
-            "(blank screen)"
+        let waiting = if board.previews.contains_key(pane_id) {
+            "blank screen"
         } else {
-            "loading…"
+            "connecting…"
         };
+        let x = content.x + content.width.saturating_sub(width_of(waiting) as u16) / 2;
+        let y = content.y + content.height / 2;
         put(
             buffer,
-            left,
-            inner.y + BOX_CHROME_ROWS,
-            width,
+            x,
+            y,
+            content.right().saturating_sub(x),
             waiting,
             Style::default().fg(palette.overlay0).bg(bg),
         );
         return;
     }
-    // Anchored to the bottom like a chat, so the newest line sits last.
-    let start = lines.len().saturating_sub(body_rows);
+    let rows = content.height as usize;
+    let start = lines.len().saturating_sub(rows);
     let shown = &lines[start..];
-    let first_row = inner.y + BOX_CHROME_ROWS + (body_rows - shown.len()) as u16;
+    let first_row = content.y + (rows - shown.len()) as u16;
     for (row, line) in shown.iter().enumerate() {
-        put(
+        draw_styled_line(
             buffer,
-            left,
+            content.x,
             first_row + row as u16,
-            width,
+            content.width,
             line,
-            Style::default().fg(palette.subtext0).bg(bg),
+            base,
         );
     }
 }
 
-/// `{icon} {target} ❯ message`, or a dim placeholder naming the keys.
+/// One screen row: its plain text, for detection, and its styled runs.
+#[derive(Debug, Default)]
+struct StyledLine {
+    plain: String,
+    spans: Vec<(String, Style)>,
+}
+
+/// Parses an ANSI screen dump into styled rows. Only SGR styling is kept.
+/// Other escape sequences and control characters are dropped, tabs become
+/// spaces, and backgrounds are kept so message bubbles still read as such.
+fn parse_ansi(text: &str) -> Vec<StyledLine> {
+    let mut lines = Vec::new();
+    let mut line = StyledLine::default();
+    let mut style = Style::default();
+    let mut run = String::new();
+    let mut width = 0usize;
+    let mut chars = text.chars().peekable();
+    let flush = |line: &mut StyledLine, run: &mut String, style: Style| {
+        if !run.is_empty() {
+            line.spans.push((std::mem::take(run), style));
+        }
+    };
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\n' => {
+                flush(&mut line, &mut run, style);
+                lines.push(std::mem::take(&mut line));
+                width = 0;
+            }
+            '\u{1b}' => match chars.peek() {
+                Some('[') => {
+                    chars.next();
+                    let mut params = String::new();
+                    let mut final_byte = None;
+                    for next in chars.by_ref() {
+                        if ('\u{40}'..='\u{7e}').contains(&next) {
+                            final_byte = Some(next);
+                            break;
+                        }
+                        params.push(next);
+                    }
+                    if final_byte == Some('m') {
+                        flush(&mut line, &mut run, style);
+                        style = apply_sgr(style, &params);
+                    }
+                }
+                Some(']') => {
+                    chars.next();
+                    while let Some(next) = chars.next() {
+                        if next == '\u{7}' {
+                            break;
+                        }
+                        if next == '\u{1b}' && chars.peek() == Some(&'\\') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                Some(_) => {
+                    chars.next();
+                }
+                None => {}
+            },
+            '\t' => {
+                let pad = 4 - width % 4;
+                run.extend(std::iter::repeat_n(' ', pad));
+                line.plain.extend(std::iter::repeat_n(' ', pad));
+                width += pad;
+            }
+            ch if ch.is_control() => {}
+            ch => {
+                run.push(ch);
+                line.plain.push(ch);
+                width += unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+            }
+        }
+    }
+    flush(&mut line, &mut run, style);
+    if !line.plain.is_empty() || !line.spans.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
+fn apply_sgr(style: Style, params: &str) -> Style {
+    use ratatui::style::Color;
+    let codes = params
+        .split([';', ':'])
+        .map(|code| code.parse::<u16>().ok())
+        .collect::<Vec<_>>();
+    let mut style = style;
+    let mut index = 0;
+    if codes.iter().all(Option::is_none) {
+        return Style::default();
+    }
+    let color_at = |index: &mut usize| -> Option<Color> {
+        match codes.get(*index + 1).copied().flatten() {
+            Some(5) => {
+                let color = codes
+                    .get(*index + 2)
+                    .copied()
+                    .flatten()
+                    .map(|n| Color::Indexed(n as u8));
+                *index += 2;
+                color
+            }
+            Some(2) => {
+                // Accept both 38;2;r;g;b and the colon form 38:2::r:g:b.
+                let rest = &codes[*index + 2..];
+                let values = rest.iter().copied().flatten().take(3).collect::<Vec<_>>();
+                let skip = if rest.first().is_some_and(Option::is_none) {
+                    4
+                } else {
+                    3
+                };
+                *index += 1 + skip;
+                (values.len() == 3)
+                    .then(|| Color::Rgb(values[0] as u8, values[1] as u8, values[2] as u8))
+            }
+            _ => None,
+        }
+    };
+    while index < codes.len() {
+        match codes[index] {
+            Some(0) | None => style = Style::default(),
+            Some(1) => style = style.add_modifier(Modifier::BOLD),
+            Some(2) => style = style.add_modifier(Modifier::DIM),
+            Some(3) => style = style.add_modifier(Modifier::ITALIC),
+            Some(4) => style = style.add_modifier(Modifier::UNDERLINED),
+            Some(7) => style = style.add_modifier(Modifier::REVERSED),
+            Some(9) => style = style.add_modifier(Modifier::CROSSED_OUT),
+            Some(22) => style = style.remove_modifier(Modifier::BOLD | Modifier::DIM),
+            Some(23) => style = style.remove_modifier(Modifier::ITALIC),
+            Some(24) => style = style.remove_modifier(Modifier::UNDERLINED),
+            Some(27) => style = style.remove_modifier(Modifier::REVERSED),
+            Some(29) => style = style.remove_modifier(Modifier::CROSSED_OUT),
+            Some(code @ 30..=37) => style.fg = Some(Color::Indexed((code - 30) as u8)),
+            Some(code @ 90..=97) => style.fg = Some(Color::Indexed((code - 90 + 8) as u8)),
+            Some(code @ 40..=47) => style.bg = Some(Color::Indexed((code - 40) as u8)),
+            Some(code @ 100..=107) => style.bg = Some(Color::Indexed((code - 100 + 8) as u8)),
+            Some(38) => style.fg = color_at(&mut index).or(style.fg),
+            Some(48) => style.bg = color_at(&mut index).or(style.bg),
+            Some(39) => style.fg = None,
+            Some(49) => style.bg = None,
+            Some(_) => {}
+        }
+        index += 1;
+    }
+    style
+}
+
+/// The screen as styled rows, minus trailing blank rows and the agent's own
+/// input box and footer, so the box shows the work.
+fn preview_lines(text: &str) -> Vec<StyledLine> {
+    let mut lines = parse_ansi(text);
+    let plain = lines
+        .iter()
+        .map(|line| line.plain.trim_end())
+        .collect::<Vec<_>>();
+    if let Some(cut) = input_box_start(&plain) {
+        lines.truncate(cut);
+    }
+    while lines
+        .last()
+        .is_some_and(|line| line.plain.trim().is_empty())
+    {
+        lines.pop();
+    }
+    lines
+}
+
+/// Draws styled runs over `base`, cut to `max_width` with a trailing `…`.
+fn draw_styled_line(
+    buffer: &mut Buffer,
+    x: u16,
+    y: u16,
+    max_width: u16,
+    line: &StyledLine,
+    base: Style,
+) {
+    let max_width = max_width as usize;
+    let total = width_of(&line.plain);
+    let budget = if total > max_width {
+        max_width.saturating_sub(1)
+    } else {
+        max_width
+    };
+    let mut used = 0usize;
+    let mut cursor = x;
+    'runs: for (text, style) in &line.spans {
+        let style = base.patch(*style);
+        for ch in text.chars() {
+            let ch_width = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+            if used + ch_width > budget {
+                break 'runs;
+            }
+            let mut encoded = [0u8; 4];
+            let (end, _) = buffer.set_stringn(
+                cursor,
+                y,
+                ch.encode_utf8(&mut encoded),
+                ch_width.max(1),
+                style,
+            );
+            cursor = end;
+            used += ch_width;
+        }
+    }
+    if total > max_width && max_width > 0 {
+        buffer.set_stringn(cursor, y, "…", 1, base.fg(base.fg.unwrap_or_default()));
+    }
+}
+
+/// One minimal row: `✳ master ❯ message…`, with key hints on the right.
 fn render_input(
     buffer: &mut Buffer,
     row: Rect,
@@ -720,15 +1107,15 @@ fn render_input(
     }
     let pane_id = board.pane_ids.get(board.selected)?;
     let (icon, headline, status) = box_identity(snapshot, pane_id);
-    let tone = status.map_or(palette.overlay0, |status| status_color(status, palette));
+    let icon_color = status.map_or(palette.overlay0, |status| status_color(status, palette));
     let target = crate::ui::truncate_end(&headline, (row.width / 3).max(6) as usize);
     let mut x = put(
         buffer,
-        row.x + 1,
+        row.x + 2,
         row.y,
-        row.width.saturating_sub(1),
+        row.width.saturating_sub(2),
         icon,
-        Style::default().fg(tone),
+        Style::default().fg(icon_color),
     );
     x = put(
         buffer,
@@ -754,24 +1141,46 @@ fn render_input(
         row.y,
         row.right().saturating_sub(x),
         " ❯ ",
-        Style::default().fg(palette.accent),
+        Style::default()
+            .fg(palette.accent)
+            .add_modifier(Modifier::BOLD),
     );
-    let field = Rect::new(x, row.y, row.right().saturating_sub(x + 1), 1);
+
+    let hint = if board.prefix_pending {
+        "1-9 zoom  ·  space zoom here"
+    } else if board.input.as_str().is_empty() {
+        "⇥ switch  ·  ⏎ zoom in"
+    } else {
+        "⏎ send"
+    };
+    let hint_width = width_of(hint) as u16;
+    let show_hint = row.right().saturating_sub(x) > hint_width + 20;
+    let field_right = if show_hint {
+        row.right().saturating_sub(hint_width + 3)
+    } else {
+        row.right().saturating_sub(1)
+    };
+    if show_hint {
+        put(
+            buffer,
+            field_right + 1,
+            row.y,
+            hint_width + 1,
+            hint,
+            Style::default().fg(palette.overlay0),
+        );
+    }
+    let field = Rect::new(x, row.y, field_right.saturating_sub(x), 1);
     if field.is_empty() {
         return None;
     }
     if board.input.as_str().is_empty() {
-        let hint = if board.prefix_pending {
-            "1-9 zoom into a box · space zoom into this one".to_owned()
-        } else {
-            format!("message {target} · tab switch · ⏎ on empty zooms in")
-        };
         put(
             buffer,
             field.x,
             field.y,
             field.width,
-            &hint,
+            &format!("Message {target}…"),
             Style::default().fg(palette.overlay0),
         );
         return Some(crate::protocol::CursorState {
@@ -806,39 +1215,30 @@ pub(super) fn render_zoom_header(
             .set_symbol(" ")
             .set_style(Style::default().bg(bg));
     }
-    let back = " ‹ board ";
     let key = Style::default()
         .fg(palette.accent)
         .bg(bg)
         .add_modifier(Modifier::BOLD);
-    let end = put(buffer, row.x, row.y, row.width, back, key);
+    let end = put(buffer, row.x, row.y, row.width, " ‹ board ", key);
     hits.board_return = Rect::new(row.x, row.y, end - row.x, 1);
     let mut x = put(
         buffer,
         end,
         row.y,
         row.right().saturating_sub(end),
-        "⌃b space",
-        Style::default().fg(palette.overlay0).bg(bg),
+        "│ ",
+        Style::default().fg(palette.surface1).bg(bg),
     );
     if let Some(pane_id) = snapshot.focused_pane_id.as_deref() {
         let (icon, headline, status) = box_identity(snapshot, pane_id);
-        let tone = status.map_or(palette.overlay0, |status| status_color(status, palette));
-        x = put(
-            buffer,
-            x,
-            row.y,
-            row.right().saturating_sub(x),
-            "   ·   ",
-            Style::default().fg(palette.overlay0).bg(bg),
-        );
+        let icon_color = status.map_or(palette.overlay0, |status| status_color(status, palette));
         x = put(
             buffer,
             x,
             row.y,
             row.right().saturating_sub(x),
             icon,
-            Style::default().fg(tone).bg(bg),
+            Style::default().fg(icon_color).bg(bg),
         );
         x = put(
             buffer,
@@ -848,7 +1248,7 @@ pub(super) fn render_zoom_header(
             " ",
             Style::default().bg(bg),
         );
-        put(
+        x = put(
             buffer,
             x,
             row.y,
@@ -860,19 +1260,18 @@ pub(super) fn render_zoom_header(
                 .add_modifier(Modifier::BOLD),
         );
     }
-}
-
-/// The screen minus trailing blank rows and the agent's own input box, so
-/// the box shows the work rather than an empty prompt and status footer.
-fn preview_tail(text: &str) -> Vec<&str> {
-    let mut lines = text.lines().map(str::trim_end).collect::<Vec<_>>();
-    if let Some(cut) = input_box_start(&lines) {
-        lines.truncate(cut);
+    let hint = "⌃b space board ";
+    if (x as usize) + width_of(hint) + 3 <= row.right() as usize {
+        let hint_x = row.right() - width_of(hint) as u16;
+        put(
+            buffer,
+            hint_x,
+            row.y,
+            width_of(hint) as u16,
+            hint,
+            Style::default().fg(palette.overlay0).bg(bg),
+        );
     }
-    while lines.last().is_some_and(|line| line.is_empty()) {
-        lines.pop();
-    }
-    lines
 }
 
 /// Claude Code draws its prompt as a `❯` line under a full width rule, or in
@@ -1055,10 +1454,10 @@ mod tests {
             }
             let (left, right, top, bottom) = (tile.x, tile.right() - 1, tile.y, tile.bottom() - 1);
             for (x, y, expected) in [
-                (left, top, "┌"),
-                (right, top, "┐"),
-                (left, bottom, "└"),
-                (right, bottom, "┘"),
+                (left, top, "╭"),
+                (right, top, "╮"),
+                (left, bottom, "╰"),
+                (right, bottom, "╯"),
             ] {
                 assert_eq!(
                     buffer[(x, y)].symbol(),
@@ -1077,14 +1476,16 @@ mod tests {
                     "│",
                     "{context}: right edge of box {index}"
                 );
-                if y != top + 3 {
-                    assert_eq!(
-                        buffer[(right - 1, y)].symbol(),
-                        " ",
-                        "{context}: padding column of box {index} row {y}"
-                    );
-                }
+                assert_eq!(
+                    buffer[(right - 1, y)].symbol(),
+                    " ",
+                    "{context}: padding column of box {index} row {y}"
+                );
             }
+            assert!(
+                matches!(buffer[(right - 1, top)].symbol(), "─" | " "),
+                "{context}: title of box {index} ran into its corner"
+            );
         }
     }
 
@@ -1279,6 +1680,73 @@ mod tests {
             !preview_tail(&only_box).is_empty(),
             "nothing above the box keeps the box"
         );
+    }
+
+    #[test]
+    fn ansi_screens_keep_colors_and_drop_everything_else() {
+        use ratatui::style::Color;
+        let lines = parse_ansi(
+            "\u{1b}[0m\u{1b}[38;2;215;119;87m⏺\u{1b}[0m Done \u{1b}[1;31mfail\u{1b}[22;39m ok\r\n\u{1b}]0;title\u{7}a\tb\u{7}c\n\u{1b}[38:2::1:2:3mx\u{1b}[38;5;208my",
+        );
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0].plain, "⏺ Done fail ok");
+        assert_eq!(
+            lines[0].spans[0],
+            (
+                "⏺".to_owned(),
+                Style::default().fg(Color::Rgb(215, 119, 87))
+            )
+        );
+        let fail = lines[0]
+            .spans
+            .iter()
+            .find(|(text, _)| text == "fail")
+            .expect("fail run");
+        assert_eq!(fail.1.fg, Some(Color::Indexed(1)));
+        assert!(fail.1.add_modifier.contains(Modifier::BOLD));
+        let ok = lines[0]
+            .spans
+            .iter()
+            .find(|(text, _)| text == " ok")
+            .expect("ok run");
+        assert_eq!(ok.1.fg, None);
+        assert_eq!(
+            lines[1].plain, "a   bc",
+            "osc dropped, tab expanded, bell dropped"
+        );
+        assert_eq!(lines[2].spans[0].1.fg, Some(Color::Rgb(1, 2, 3)));
+        assert_eq!(lines[2].spans[1].1.fg, Some(Color::Indexed(208)));
+    }
+
+    #[test]
+    fn status_pills_spin_and_count_while_working() {
+        use crate::api::schema::AgentStatus;
+        let palette = ClientShellConfig::from_config(&crate::config::Config::default()).palette;
+        let now = std::time::Instant::now();
+        let mut board = ClientBoardOverlay {
+            now: Some(now),
+            ..ClientBoardOverlay::default()
+        };
+        board.since.insert(
+            "a".into(),
+            (
+                AgentStatus::Working,
+                now - std::time::Duration::from_secs(135),
+            ),
+        );
+        let (first, _) = status_pill(&board, "a", Some(AgentStatus::Working), &palette);
+        board.frame += 1;
+        let (second, _) = status_pill(&board, "a", Some(AgentStatus::Working), &palette);
+        assert!(first.ends_with("working 2m"), "{first:?}");
+        assert_ne!(first, second, "the spinner advances");
+        assert_eq!(status_pill(&board, "b", None, &palette).0, "shell");
+    }
+
+    fn preview_tail(text: &str) -> Vec<String> {
+        preview_lines(text)
+            .into_iter()
+            .map(|line| line.plain.trim_end().to_owned())
+            .collect()
     }
 
     /// Claude Code titles itself "◐ Claude Code" while working.
