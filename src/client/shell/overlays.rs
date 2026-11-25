@@ -43,11 +43,13 @@ pub(crate) fn render_client_overlay(
     k: &LiveKeybindConfig,
     p: &Palette,
 ) -> Option<OverlayRender> {
+    // Popups dim the screen behind them. The board is the screen itself.
     if !matches!(
         o,
         ClientShellOverlay::Navigator(_)
             | ClientShellOverlay::ContextMenu(_)
             | ClientShellOverlay::GlobalMenu(_)
+            | ClientShellOverlay::Board(_)
     ) {
         for y in b.area.y..b.area.bottom() {
             for x in b.area.x..b.area.right() {

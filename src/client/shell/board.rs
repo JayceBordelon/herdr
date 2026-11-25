@@ -465,11 +465,11 @@ pub(super) fn render_board(
     }
     for y in area.y..area.bottom() {
         for x in area.x..area.right() {
-            buffer[(x, y)].set_symbol(" ").set_style(
-                Style::default()
-                    .fg(palette.text)
-                    .bg(ratatui::style::Color::Reset),
-            );
+            // Reset, not patch: a patched style keeps attributes such as dim
+            // from whatever was drawn underneath.
+            let cell = &mut buffer[(x, y)];
+            cell.reset();
+            cell.set_style(Style::default().fg(palette.text));
         }
     }
     let layout = board_layout(area, board.pane_ids.len());
@@ -1642,6 +1642,25 @@ mod tests {
             "tiles below master when narrow"
         );
         assert_eq!(alone.input.y, 33, "input line sits on the last row");
+    }
+
+    /// Overlays dim the screen behind them, which once grayed out the whole
+    /// board. Nothing the board draws itself may carry that dim.
+    #[test]
+    fn the_composed_board_is_never_dimmed() {
+        let mut state = board_state(3);
+        let frame = state.compose(120, 30).expect("board frame");
+        let buffer = frame.to_ratatui_buffer().expect("board buffer");
+        for y in 0..30 {
+            for x in 0..120 {
+                let cell = &buffer[(x, y)];
+                assert!(
+                    !cell.modifier.contains(Modifier::DIM),
+                    "cell ({x},{y}) {:?} is dimmed",
+                    cell.symbol()
+                );
+            }
+        }
     }
 
     #[test]
