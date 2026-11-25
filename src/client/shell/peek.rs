@@ -592,14 +592,39 @@ fn render_peek_tile(
     }
 }
 
-/// The screen minus trailing blank rows, so the tile shows where the agent
-/// is actually writing.
+/// The screen minus trailing blank rows and the agent's own input box, so
+/// the tile shows the work rather than an empty prompt and status footer.
 fn preview_tail(text: &str) -> Vec<&str> {
     let mut lines = text.lines().map(str::trim_end).collect::<Vec<_>>();
+    if let Some(cut) = input_box_start(&lines) {
+        lines.truncate(cut);
+    }
     while lines.last().is_some_and(|line| line.is_empty()) {
         lines.pop();
     }
     lines
+}
+
+/// Claude Code draws its prompt as a `❯` line under a full width rule, or in
+/// older versions as `│ >` inside a `╭─` box. Everything from that rule down
+/// is input box and footer. Returns None when no such box is found, or when
+/// cutting would leave nothing to show.
+fn input_box_start(lines: &[&str]) -> Option<usize> {
+    let is_rule = |line: &str| {
+        let line = line.trim();
+        line.chars().count() >= 10 && line.chars().all(|ch| ch == '─')
+    };
+    (1..lines.len())
+        .rev()
+        .find(|&index| {
+            let line = lines[index].trim_start();
+            let above = lines[index - 1];
+            (line.starts_with('❯') && is_rule(above))
+                || ((line.starts_with("│ >") || line.starts_with("│ ❯"))
+                    && above.trim_start().starts_with("╭─"))
+        })
+        .map(|index| index - 1)
+        .filter(|&cut| lines[..cut].iter().any(|line| !line.trim().is_empty()))
 }
 
 #[cfg(test)]
@@ -625,6 +650,30 @@ mod tests {
     #[test]
     fn preview_tail_drops_trailing_blank_rows() {
         assert_eq!(preview_tail("a\nb  \n\n   \n"), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn preview_tail_cuts_claude_code_input_box_and_footer() {
+        let rule = "─".repeat(60);
+        let screen = format!(
+            "⏺ I've started four research tracks.\n\n✻ Waiting for 4 background agents\n{rule}\n❯ \n{rule}\n  ⏵⏵ auto mode on\n  ◯ general-purpose  Searching\n"
+        );
+        assert_eq!(
+            preview_tail(&screen),
+            vec![
+                "⏺ I've started four research tracks.",
+                "",
+                "✻ Waiting for 4 background agents"
+            ]
+        );
+        let boxed = "⏺ Done.\n╭────────────╮\n│ >         │\n╰────────────╯\n  ? for shortcuts\n";
+        assert_eq!(preview_tail(boxed), vec!["⏺ Done."]);
+        let only_box = format!("{rule}\n❯ \n{rule}\n");
+        assert!(
+            !preview_tail(&only_box).is_empty(),
+            "nothing above the box keeps the box"
+        );
+        assert_eq!(preview_tail("plain\n> \n"), vec!["plain", ">"]);
     }
 
     const HEADLINES: &[&str] = &[
@@ -655,7 +704,14 @@ mod tests {
             tab_id: format!("tab_sub_{index}"),
             name: None,
             display_agent: None,
-            agent: Some(if index.is_multiple_of(2) { "claude" } else { "codex" }.into()),
+            agent: Some(
+                if index.is_multiple_of(2) {
+                    "claude"
+                } else {
+                    "codex"
+                }
+                .into(),
+            ),
             title: Some(headline.into()),
             terminal_title: None,
             terminal_title_stripped: None,

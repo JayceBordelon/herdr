@@ -32,6 +32,11 @@ Peek (`prefix+space`, `src/client/shell/peek.rs`) tiles every subagent over a
 blanked master by polling `pane.read`. The client only streams the focused
 pane, so any per-subagent view must poll like this.
 
+Agents running inside vcer learn this model from `skills/herdr/SKILL.md`
+(printed by `vcer --skill`, compiled into the binary). Update it whenever the
+layout model or a keybind it names changes, or agents report intended
+behavior as bugs.
+
 Untrusted text (titles, pane screens) goes through `ui::sanitize_line` before
 it is drawn. Peek's layout test renders a matrix of sizes, counts and text
 shapes. Extend it rather than adding one-off cases.
