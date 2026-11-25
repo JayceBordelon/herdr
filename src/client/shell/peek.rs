@@ -919,6 +919,38 @@ mod tests {
         }
     }
 
+    /// Claude Code titles itself "◐ Claude Code" while working, which named
+    /// two sidebar rows after the tool instead of their task.
+    #[test]
+    fn headlines_skip_status_glyphs_and_fall_back_to_the_agent_name() {
+        let snapshot = super::super::tests::snapshot();
+        let headline = |title: Option<&str>, terminal: Option<&str>, name: Option<&str>| {
+            let mut agent = subagent(2, "");
+            agent.title = title.map(str::to_owned);
+            agent.terminal_title = terminal.map(str::to_owned);
+            agent.name = name.map(str::to_owned);
+            super::super::agent_sidebar::agent_headline(&snapshot, &agent)
+        };
+        assert_eq!(
+            headline(None, Some("◐ Claude Code"), Some("test-counter")),
+            "test-counter"
+        );
+        assert_eq!(
+            headline(None, Some("✳ Claude Code"), Some("skill-reviewer")),
+            "skill-reviewer"
+        );
+        assert_eq!(
+            headline(None, Some("⠋ Refactor auth"), Some("x")),
+            "Refactor auth"
+        );
+        assert_eq!(
+            headline(Some("◐ Peek.rs shell client"), None, None),
+            "Peek.rs shell client"
+        );
+        assert_eq!(headline(None, Some("◐ Claude Code"), None), "subagent");
+        assert_eq!(headline(Some("(draft) notes"), None, None), "(draft) notes");
+    }
+
     #[test]
     fn sanitized_headlines_carry_no_control_characters() {
         let snapshot = super::super::tests::snapshot();

@@ -43,7 +43,8 @@ pub(super) fn master_pane_id(snapshot: &ClientShellSnapshot) -> Option<&str> {
 }
 
 /// "master" for the main session, otherwise the task the agent reports in
-/// its title. Titles that only name the agent say nothing about the task.
+/// its title, then the name it was started with. Titles that only name the
+/// agent say nothing about the task.
 pub(super) fn agent_headline(
     snapshot: &ClientShellSnapshot,
     agent: &crate::protocol::ClientShellAgent,
@@ -52,7 +53,7 @@ pub(super) fn agent_headline(
         return "master".into();
     }
     let names_only_the_agent = |title: &str| {
-        let title = title.trim().to_ascii_lowercase();
+        let title = title.to_ascii_lowercase();
         title.is_empty()
             || agent.agent.as_deref().is_some_and(|name| title == name)
             || matches!(title.as_str(), "claude code" | "codex")
@@ -64,9 +65,25 @@ pub(super) fn agent_headline(
     ]
     .into_iter()
     .flatten()
-    .map(|title| crate::ui::sanitize_line(title).trim().to_owned())
+    .map(clean_title)
     .find(|title| !names_only_the_agent(title))
+    .or_else(|| {
+        agent
+            .name
+            .as_deref()
+            .map(clean_title)
+            .filter(|name| !name.is_empty())
+    })
     .unwrap_or_else(|| "subagent".into())
+}
+
+/// Agents prefix their terminal title with status glyphs such as `◐`, `⠋`
+/// or `✳`, which the row already shows as its icon.
+fn clean_title(title: &str) -> String {
+    crate::ui::sanitize_line(title)
+        .trim_start_matches(|ch: char| !ch.is_alphanumeric() && !"([{\"'`#@~/.".contains(ch))
+        .trim()
+        .to_owned()
 }
 
 pub(super) fn ordered_agent_pane_ids(
